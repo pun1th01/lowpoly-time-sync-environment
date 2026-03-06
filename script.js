@@ -429,7 +429,7 @@ function updateSunPosition(lat, lon, date = new Date()) {
 function loadEnvironmentModel() {
   const loader = new GLTFLoader();
   loader.load(
-    'Models/scenery.glb',
+    'assets/models/scenery.glb',
     (gltf) => {
       const model = gltf.scene;
       const box = new THREE.Box3().setFromObject(model);
