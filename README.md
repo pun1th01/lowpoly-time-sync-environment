@@ -191,13 +191,7 @@ lowpoly-time-sync-environment/
 
 ## Future Improvements
 
-- [ ] **Physically-based atmosphere** — Rayleigh/Mie scattering for more accurate sunset colours
-- [ ] **Dynamic cloud cover** — tie cloud density to real weather API data
-- [ ] **Seasonal star rotation** — precess the star dome with the date, not just the hour
-- [ ] **Camera orbit controls** — allow the user to look around the scene
-- [ ] **Day/night cycle animation mode** — continuous fast-forward time lapse
-- [ ] **Mobile touch support** — responsive layout and touch events for the slider
-- [ ] **GitHub Pages deployment** — live demo link in the repository About section
+- [ ] Mobile support — responsive layout and touch-friendly slider controls for phones and tablets
 
 ---
 
