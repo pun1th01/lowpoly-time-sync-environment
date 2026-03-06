@@ -4,6 +4,26 @@ A real-time low-poly 3D environment built with **Three.js** where sky lighting, 
 
 ---
 
+## Screenshots
+
+### Sunrise
+
+![Sunrise](assets/screenshots/sunrise.png)
+
+### Noon
+
+![Noon](assets/screenshots/noon.png)
+
+### Sunset
+
+![Sunset](assets/screenshots/sunset.png)
+
+### Night
+
+![Night](assets/screenshots/night.png)
+
+---
+
 ## Demo
 
 Load the page and the scene immediately reflects your current time and location:
