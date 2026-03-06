@@ -4,6 +4,12 @@ A real-time low-poly 3D environment built with **Three.js** where sky lighting, 
 
 ---
 
+## What This Project Does
+
+This website recreates the sky as it actually appears at your real-world location and time of day. It uses astronomy calculations to find the true position of the sun and moon in the sky, then renders lighting that transitions naturally between dawn, noon, dusk, and night. The moon displays its correct phase based on the current date. A time slider at the bottom of the screen lets you scrub to any hour of the day, jump forward or backward by a day, or reset to the current real-world time.
+
+---
+
 ## Live Demo
 
 View the project here:
@@ -131,6 +137,7 @@ This produces correct crescent, quarter, gibbous, and full moon appearances as t
 - [SunCalc 1.9.0](https://github.com/mourner/suncalc) — astronomical sun/moon calculations
 - [GLTFLoader](https://threejs.org/docs/#examples/en/loaders/GLTFLoader) — low-poly scene model
 - Vanilla ES modules — no build step required
+- [Blender](https://www.blender.org/) — all environment assets were modeled and textured manually in Blender and exported as GLB files for efficient rendering on the web
 
 ---
 
