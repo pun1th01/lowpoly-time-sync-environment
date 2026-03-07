@@ -41,9 +41,9 @@ https://pun1th01.github.io/lowpoly-time-sync-environment/
 
 Load the page and the scene immediately reflects your current time and location:
 
-- The sun rises and sets along an astronomically accurate arc
+- The sun rises and sets along the correct solar path for the user's location and date
 - The sky transitions through day, sunset, twilight, and night palettes
-- Stars appear at dusk, with the Milky Way band visible overhead
+- Stars appear at dusk, including a denser Milky Way band across the sky
 - The moon renders with its correct current phase
 - Procedural clouds drift slowly across the sky dome
 
@@ -56,7 +56,7 @@ Use the time slider at the bottom to scrub through any hour of the day, or step 
 | Feature | Description |
 |---|---|
 | **Real sun positioning** | SunCalc computes altitude and azimuth from GPS coordinates and the current date/time |
-| **Real moon positioning** | Moon placed on its actual orbital arc, not opposite the sun |
+| **Real moon positioning** | Moon positioned using real astronomical position data from SunCalc, ensuring correct relative placement in the sky |
 | **Moon phases** | Per-pixel Lambertian shader driven by the real sun–moon angle; crescent, gibbous, and full moon all render correctly |
 | **Dynamic sky colours** | Four-stage altitude blend: day → sunset → twilight → night |
 | **Sky gradient dome** | Inverted sphere with a zenith/horizon GLSL gradient |
