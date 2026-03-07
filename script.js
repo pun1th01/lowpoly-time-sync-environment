@@ -39,6 +39,7 @@ document.body.appendChild(renderer.domElement);
 let simulationTime = new Date();
 let currentLat = 12.9716;
 let currentLon = 77.5946;
+let cloudSimOffset = 0; // hours-based offset so the slider visibly shifts cloud position
 
 function refreshSun() {
   updateSunPosition(currentLat, currentLon, simulationTime);
@@ -140,7 +141,7 @@ const skyDomeMat = new THREE.ShaderMaterial({
       float heightMask = smoothstep(0.0, 0.12, vWorldDir.y);
       vec2 uv = vWorldDir.xz / (vWorldDir.y + 0.05);
       uv *= 2.0;
-      uv += vec2(time * 0.03, time * 0.015);
+      uv += vec2(time * 0.3, time * 0.15);
 
       float cloud = smoothstep(0.52, 0.72, fbm(uv)) * heightMask;
 
@@ -430,10 +431,10 @@ function updateSunPosition(lat, lon, date = new Date()) {
   starMaterial.uniforms.starVisibility.value =
     THREE.MathUtils.clamp((-altitude - 0.1) / 0.15, 0, 1);
 
-  // Star rotation and cloud drift both tied to simulation hours
+  // Star rotation tied to simulation hours; cloud offset also driven by sim hours
   const hours = date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
   starGroup.rotation.y = (hours / 24) * Math.PI * 2;
-  skyDomeMat.uniforms.time.value = hours * 0.05;
+  cloudSimOffset = hours * 5.0; // large enough that each hour of slider movement is clearly visible
 }
 
 // =============================================================================
@@ -637,8 +638,11 @@ function animate() {
   // Keep sky/star domes centred on camera so they always surround the viewer
   starGroup.position.copy(camera.position);
   skyDome.position.copy(camera.position);
-  // Drive per-vertex twinkling each frame
-  starMaterial.uniforms.time.value = performance.now() * 0.001;
+  // Drive per-vertex twinkling and cloud drift each frame
+  const now = performance.now() * 0.001;
+  starMaterial.uniforms.time.value = now;
+  // Combine sim-time offset (slider) with continuous real-time drift
+  skyDomeMat.uniforms.time.value   = cloudSimOffset + now;
   renderer.render(scene, camera);
 }
 
