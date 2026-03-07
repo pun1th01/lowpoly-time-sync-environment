@@ -178,7 +178,7 @@ const _horizonGlow      = new THREE.Color(0xffbb66);
 // Sun — self-lit sphere, always full brightness
 const sunSphere = new THREE.Mesh(
   new THREE.SphereGeometry(900, 8, 6),
-  new THREE.MeshBasicMaterial({ color: 0xffdd66 })
+  new THREE.MeshBasicMaterial({ color: 0xffdd66, transparent: true })
 );
 sunSphere.scale.setScalar(1.25);
 scene.add(sunSphere);
@@ -187,8 +187,10 @@ scene.add(sunSphere);
 // normals against the sun direction (also in view space). Lambertian dot product
 // with a soft smoothstep terminator; earthshine fills the dark side faintly.
 const moonMaterial = new THREE.ShaderMaterial({
+  transparent: true,
   uniforms: {
-    sunDirection: { value: new THREE.Vector3(1, 0, 0) }
+    sunDirection: { value: new THREE.Vector3(1, 0, 0) },
+    uOpacity:     { value: 1.0 }
   },
   vertexShader: `
     varying vec3 vWorldNormal;
@@ -200,6 +202,7 @@ const moonMaterial = new THREE.ShaderMaterial({
   `,
   fragmentShader: `
     uniform vec3 sunDirection;
+    uniform float uOpacity;
     varying vec3 vWorldNormal;
     void main() {
       vec3 N = normalize(vWorldNormal);
@@ -207,7 +210,7 @@ const moonMaterial = new THREE.ShaderMaterial({
       float brightness = smoothstep(-0.05, 0.25, dot(N, L));
       float earthshine = 0.12; // keeps dark limb visible at twilight
       vec3 moonColor = vec3(0.85, 0.87, 0.92);
-      gl_FragColor = vec4(moonColor * (brightness + earthshine), 1.0);
+      gl_FragColor = vec4(moonColor * (brightness + earthshine), uOpacity);
     }
   `
 });
@@ -377,18 +380,27 @@ function updateSunPosition(lat, lon, date = new Date()) {
   const horizonFactor = THREE.MathUtils.clamp((altitude + 0.1) / 0.6, 0, 1);
   dirLight.color.setRGB(1.0, 0.75 + horizonFactor * 0.25, 0.5 + horizonFactor * 0.5);
 
-  // Visibility
-  sunSphere.visible  = altitude > -0.05;
-  moonSphere.visible = moonPos.altitude > -0.05;
-  moonGlow.visible   = moonPos.altitude > -0.05;
+  // Moon horizon fade — smooth 0→1 over altitude range [-0.05, 0.05]
+  const FADE_START = 0.05;
+  const FADE_END   = -0.05;
+  const moonOpacity = THREE.MathUtils.clamp(
+    (moonPos.altitude - FADE_END) / (FADE_START - FADE_END), 0, 1
+  );
+  moonMaterial.uniforms.uOpacity.value = moonOpacity;
+  moonSphere.visible = moonOpacity > 0.01;
+  moonGlow.visible   = moonOpacity > 0.01;
 
   // Glow halos — sun scale expands near the horizon; moon opacity scales with phase
+  const sunOpacity = THREE.MathUtils.clamp((altitude - FADE_END) / (FADE_START - FADE_END), 0, 1);
+  sunSphere.material.opacity = sunOpacity;
+  sunSphere.visible = sunOpacity > 0.01;
   sunGlow.position.copy(sunSphere.position);
-  sunGlow.visible = altitude > -0.05;
+  sunGlow.visible = sunOpacity > 0.01;
+  sunGlowMaterial.opacity = sunOpacity;
   const glowScale = 3500 + (1 - horizonFactor) * 2000;
   sunGlow.scale.set(glowScale, glowScale, 1);
   moonGlow.position.copy(moonSphere.position);
-  moonGlowMaterial.opacity = SunCalc.getMoonIllumination(date).fraction * 0.4;
+  moonGlowMaterial.opacity = SunCalc.getMoonIllumination(date).fraction * 0.4 * moonOpacity;
 
   // Daylight factor: reaches 1.0 at ~43° altitude, stays high through afternoon
   const daylight = THREE.MathUtils.clamp((altitude + 0.15) / 0.9, 0, 1);
