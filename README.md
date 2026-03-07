@@ -61,7 +61,7 @@ Use the time slider at the bottom to scrub through any hour of the day, or step 
 | **Dynamic sky colours** | Four-stage altitude blend: day → sunset → twilight → night |
 | **Sky gradient dome** | Inverted sphere with a zenith/horizon GLSL gradient |
 | **Procedural clouds** | 3-octave FBM value noise rendered in the sky dome fragment shader; drift tied to simulation time |
-| **Star field** | 4 000+ points on a sphere with random sizes, per-vertex twinkling, and a Milky Way band density bias |
+| **Star field** | 6 000 candidate positions on a sphere; ~4 000 accepted with random sizes, per-vertex twinkling, and a Milky Way band density bias |
 | **Geolocation** | Optional browser geolocation; falls back to Bangalore (12.97° N, 77.59° E) |
 | **Time slider UI** | Glassmorphism panel; slider, ±Day buttons, and Reset |
 | **Auto time advance** | Simulation clock advances 1 minute per real-world minute when the slider is idle |
@@ -149,7 +149,7 @@ No npm, no build step — just a static file server.
 
 ```bash
 # Clone the repository
-git clone https://github.com/<username>/lowpoly-time-sync-environment.git
+git clone https://github.com/pun1th01/lowpoly-time-sync-environment.git
 cd lowpoly-time-sync-environment
 
 # Start a local server
@@ -183,11 +183,10 @@ lowpoly-time-sync-environment/
 ├── index.html          # Entry point — imports, SunCalc script tag
 ├── script.js           # All Three.js scene logic
 │
-├── Models/
-│   └── scenery.glb     # Low-poly landscape (GLTF binary)
-│
 ├── assets/
-│   └── screenshots/    # Repository screenshots
+│   ├── models/
+│   │   └── scenery.glb     # Low-poly landscape (GLTF binary)
+│   └── screenshots/        # Repository screenshots
 │
 ├── README.md
 ├── LICENSE
