@@ -500,6 +500,8 @@ function buildTimeUI() {
       font-size: 13px;
       user-select: none;
       z-index: 100;
+      max-width: calc(100vw - 32px);
+      box-sizing: border-box;
     }
     #time-controls button {
       padding: 6px 14px;
@@ -510,21 +512,57 @@ function buildTimeUI() {
       font-size: 13px;
       cursor: pointer;
       transition: background 0.2s;
+      white-space: nowrap;
+      min-height: 36px;
     }
     #time-controls button:hover { background: rgba(255,255,255,0.28); }
     #time-slider { width: 180px; accent-color: #ffcc66; cursor: pointer; }
-    #time-label  { min-width: 110px; text-align: center; opacity: 0.9; }
+    #time-label  { min-width: 110px; text-align: center; opacity: 0.9; white-space: nowrap; }
+
+    @media (max-width: 540px) {
+      #time-controls {
+        flex-direction: column;
+        gap: 10px;
+        padding: 14px 16px;
+        width: calc(100vw - 32px);
+        bottom: 16px;
+        border-radius: 14px;
+      }
+      #time-controls .btn-row {
+        display: flex;
+        gap: 8px;
+        width: 100%;
+        justify-content: center;
+      }
+      #time-controls button {
+        flex: 1;
+        font-size: 14px;
+        padding: 10px 8px;
+        min-height: 44px;
+      }
+      #time-slider {
+        width: 100%;
+        height: 6px;
+        min-height: 44px;
+      }
+      #time-label {
+        font-size: 15px;
+        min-width: unset;
+      }
+    }
   `;
   document.head.appendChild(style);
 
   const panel = document.createElement('div');
   panel.id = 'time-controls';
   panel.innerHTML = `
-    <button id="btn-prev-day">&#8722; Day</button>
+    <div class="btn-row">
+      <button id="btn-prev-day">&#8722; Day</button>
+      <span id="time-label"></span>
+      <button id="btn-next-day">&#43; Day</button>
+      <button id="btn-reset">Reset</button>
+    </div>
     <input type="range" id="time-slider" min="0" max="1439" step="1" />
-    <span id="time-label"></span>
-    <button id="btn-next-day">&#43; Day</button>
-    <button id="btn-reset">Reset</button>
   `;
   document.body.appendChild(panel);
 

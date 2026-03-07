@@ -198,7 +198,7 @@ lowpoly-time-sync-environment/
 
 ## Future Improvements
 
-- [ ] Mobile support — responsive layout and touch-friendly slider controls for phones and tablets
+- [ ] Physically-based atmosphere — Rayleigh/Mie scattering for more accurate sunset colours
 
 ---
 
