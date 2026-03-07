@@ -8,7 +8,21 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a1a2e);
 
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 300000);
+const BASE_ASPECT = 16 / 9;
+const BASE_FOV    = 60;
+function getAdaptiveFOV(currentAspect) {
+  if (currentAspect >= BASE_ASPECT) return BASE_FOV;
+  return THREE.MathUtils.radToDeg(
+    2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(BASE_FOV) / 2) / currentAspect)
+  );
+}
+
+const camera = new THREE.PerspectiveCamera(
+  getAdaptiveFOV(window.innerWidth / window.innerHeight),
+  window.innerWidth / window.innerHeight,
+  0.1,
+  300000
+);
 camera.position.set(-8739.92602089462, 386.5566095975547, 1147.3684536708317);
 camera.rotation.set(-1.0348500942949634, -1.4857159300233853, -1.0332577125278524);
 
@@ -633,9 +647,12 @@ function animate() {
 // =============================================================================
 
 window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+  const aspect = window.innerWidth / window.innerHeight;
+  camera.aspect = aspect;
+  camera.fov    = getAdaptiveFOV(aspect);
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
 });
 
 // =============================================================================

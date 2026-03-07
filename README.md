@@ -198,7 +198,10 @@ lowpoly-time-sync-environment/
 
 ## Future Improvements
 
+- [x] Mobile support — responsive layout and touch-friendly slider controls for phones and tablets
 - [ ] Physically-based atmosphere — Rayleigh/Mie scattering for more accurate sunset colours
+- [ ] Visual improvements — enhanced cloud detail, softer star glow, and smoother horizon blending
+- [ ] Visual fixes — reduce sky banding at night, improve moon glow intensity scaling at different phases
 
 ---
 
