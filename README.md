@@ -14,9 +14,10 @@ This website recreates the sky as it actually appears at your real-world locatio
 
 - Real astronomical sun and moon positioning
 - Real-time sky lighting synced to user location
-- Procedural Milky Way with stars, dust, and haze layers
+- Procedural three-layer Milky Way (stars, dust, and galactic haze)
 - GLSL shaders for moon phases, sky gradients, and clouds
 - Time-scrubbing UI to explore different times of day
+- Physically accurate celestial sphere rotation using local sidereal time
 
 ---
 
@@ -71,7 +72,7 @@ Use the time slider at the bottom to scrub through any hour of the day, or step 
 | **Dynamic sky colours** | Four-stage altitude blend: day → sunset → twilight → night, plus a warm horizon glow at sunrise/sunset |
 | **Sky gradient dome** | Inverted sphere (radius 75 000) with a per-frame zenith/horizon GLSL gradient |
 | **Procedural clouds** | 3-octave FBM value noise rendered in the sky dome fragment shader; drift rate tied to simulation hours so the slider visibly moves clouds |
-| **Star field** | Up to ~18 000 stars placed via rejection sampling on a sphere (radius 80 000); Gaussian band density bias (~4× denser along galactic plane); per-star colour tinting (blue/purple in band, warm near galactic core); per-star twinkling via time-driven sinusoid |
+| **Star field** | Up to ~18 000 stars distributed on a sphere using rejection sampling to maintain uniform angular density; Gaussian band density bias (~4× denser along galactic plane); per-star colour tinting (blue/purple in band, warm near galactic core); per-star twinkling via time-driven sinusoid; rotated using a proper celestial sphere hierarchy (latitude tilt → sidereal time → galactic tilt) |
 | **Milky Way — dust layer** | 2 200 soft additive blobs with cubic elevation falloff (±8.6°); opacity boosted near galactic-core longitude; per-blob size variation breaks up uniformity |
 | **Milky Way — haze sphere** | Inverted sphere at 97 % of star radius; 4-octave FBM fragment shader concentrated on the galactic equator; provides the continuous soft glow individual particles cannot produce |
 | **Nebula / sky-darkness link** | `nebulaVisibility = pow(starVisibility, 1.5)` — dust and haze fade in more gradually than stars, matching natural sky behaviour |
@@ -142,11 +143,38 @@ Up to 18 000 candidate positions are distributed uniformly on a sphere (radius 8
 
 ### Three-Layer Milky Way
 
-The Milky Way is rendered by three additive layers inside a single `starGroup` (tilted `rotation.z = 0.6` rad, rotated in `y` each frame by simulation hour):
+The Milky Way is rendered by three additive layers inside a `starGroup` (fixed galactic-plane tilt `rotation.z = 0.6` rad). The group sits inside a three-level celestial sphere hierarchy — see [Celestial Sphere Orientation](#celestial-sphere-orientation) below for how rotation is driven:
 
 1. **Star points** — the `Points` geometry described above; `starVisibility` uniform.
 2. **Dust blobs** — 2 200 `Points` with large `gl_PointSize`; cubic elevation falloff concentrates >90 % of blobs within ±0.05 rad of the galactic plane; opacity peaks near CORE_THETA; uses `nebulaVisibility` uniform.
 3. **Haze sphere** — inverted `SphereGeometry` at `starDistance * 0.97`; fragment shader applies a sharp Gaussian band (`exp(-lat² × 120)`) multiplied by a 4-octave FBM product, giving patchy continuous glow; uses `nebulaVisibility` uniform.
+
+### Celestial Sphere Orientation
+
+The star field and Milky Way use a three-level `Group` hierarchy so the galaxy moves across the sky without mirroring or flipping orientation:
+
+```
+latitudeGroup   rotation.x = π/2 − lat   tilts the celestial pole to the correct
+                                          elevation above the horizon for the
+                                          observer's latitude
+    └ skyGroup  rotation.y = LST × π/12  rotates the sky by local sidereal time,
+                                          aligning the star field with Earth's
+                                          rotation relative to the celestial sphere
+                                          (≈23h 56m per full rotation)
+         └ starGroup  rotation.z = 0.6   fixed galactic-plane tilt that orients
+                                          the Milky Way band diagonally
+```
+
+Local Sidereal Time (LST) is computed from the simulation timestamp each frame:
+
+```js
+const d    = (simulationTime - Date.UTC(2000, 0, 1, 12)) / 86400000; // days since J2000
+const GMST = 18.697374558 + 24.06570982441908 * d;                   // Greenwich MST (hours)
+const LST  = ((GMST + longitude / 15) % 24 + 24) % 24;              // local sidereal time
+skyGroup.rotation.y = LST * Math.PI / 12;                            // convert to radians
+```
+
+Because the galactic tilt lives on `starGroup` (innermost) and the sidereal rotation lives on `skyGroup` (middle), the two transforms are applied in the correct order by Three.js matrix multiplication. Combining both rotations on a single object with Euler angles would cause the band orientation to mirror at certain hour angles.
 
 ### Nebula / Sky-Darkness Link
 

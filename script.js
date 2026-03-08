@@ -491,7 +491,17 @@ starGroup.add(hazeSphere);              // rendered before dust and star points
 
 starGroup.add(new THREE.Points(dustGeometry,  dustMaterial));  // dust behind stars
 starGroup.add(new THREE.Points(starGeometry,  starMaterial));
-scene.add(starGroup);
+
+// Rotation hierarchy for a correct celestial sphere:
+//   latitudeGroup  — tilts the pole to the correct elevation for the observer
+//   └ skyGroup     — rotates the whole sky by local sidereal time (LST)
+//        └ starGroup — fixed galactic-plane tilt (rotation.z = 0.6)
+const skyGroup = new THREE.Group();
+skyGroup.add(starGroup);
+
+const latitudeGroup = new THREE.Group();
+latitudeGroup.add(skyGroup);
+scene.add(latitudeGroup);
 
 // =============================================================================
 // SUN / MOON POSITIONING
@@ -609,10 +619,21 @@ function updateSunPosition(lat, lon, date = new Date()) {
   dustMaterial.uniforms.starVisibility.value  = nebulaVisibility;
   hazeMaterial.uniforms.starVisibility.value  = nebulaVisibility;
 
-  // Star rotation tied to simulation hours; cloud offset also driven by sim hours
+  // Star/galaxy rotation driven by local sidereal time so the Milky Way band
+  // moves naturally with Earth's rotation and never flips.
+  const d = (simulationTime - Date.UTC(2000, 0, 1, 12)) / 86400000;
+  const GMST = 18.697374558 + 24.06570982441908 * d;
+  const LST = ((GMST + lon / 15) % 24 + 24) % 24;
+  skyGroup.rotation.y = LST * Math.PI / 12;
+
+  // Tilt the celestial sphere so the north pole sits at the correct elevation
+  // above the horizon for the observer's latitude.
+  // At 90°N → tilt = 0 (pole at zenith); at 0° → tilt = PI/2 (pole at horizon).
+  latitudeGroup.rotation.x = Math.PI / 2 - THREE.MathUtils.degToRad(lat);
+
+  // Cloud offset driven by sim hours; large enough that each hour of slider movement is clearly visible
   const hours = date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
-  starGroup.rotation.y = (hours / 24) * Math.PI * 2;
-  cloudSimOffset = hours * 5.0; // large enough that each hour of slider movement is clearly visible
+  cloudSimOffset = hours * 5.0;
 }
 
 // =============================================================================
@@ -814,7 +835,7 @@ function buildTimeUI() {
 function animate() {
   requestAnimationFrame(animate);
   // Keep sky/star domes centred on camera so they always surround the viewer
-  starGroup.position.copy(camera.position);
+  latitudeGroup.position.copy(camera.position);
   skyDome.position.copy(camera.position);
   // Drive per-vertex twinkling and cloud drift each frame
   const now = performance.now() * 0.001;
