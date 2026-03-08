@@ -258,29 +258,55 @@ scene.add(moonGlow);
 // STAR SYSTEM
 // =============================================================================
 
-// 6 000 candidates placed on a uniform sphere; the Milky Way band is simulated
-// by a Gaussian density bias around the equatorial plane. Each star stores
-// per-vertex size, brightness, and a random twinkle phase offset.
+// Stars are placed on a sphere using rejection sampling.
+// The Milky Way appears as a FULL RING spanning the whole sky dome, tilted by
+// rotation.z so it runs diagonally. Density is controlled by a band Gaussian
+// on the sphere's equatorial plane (y ≈ 0 after tilt). A smooth per-theta
+// "core brightness" gradient makes one region of the arc slightly brighter
+// without clustering stars into a blob.
 const starDistance = 80000;
+const CORE_THETA   = 1.1; // longitude of the brighter galactic-centre region
 const starPositions  = [];
 const starSizes      = [];
 const starBrightness = [];
 const starTwinkleOff = [];
+const starColors     = [];
 
-for (let i = 0; i < 6000; i++) {
+for (let i = 0; i < 18000; i++) {
+  // Uniform random point on sphere
   const theta = Math.random() * Math.PI * 2;
   const phi   = Math.acos(2 * Math.random() - 1);
   const x = starDistance * Math.sin(phi) * Math.cos(theta);
   const y = starDistance * Math.cos(phi);
   const z = starDistance * Math.sin(phi) * Math.sin(theta);
-  const bandStrength = Math.exp(-Math.pow(y / (starDistance * 0.35), 2) * 4.0);
-  if (Math.random() < 0.4 + bandStrength * 0.6) {
-    starPositions.push(x, y, z);
-    const size = Math.random() * 2 + 0.5;
-    starSizes.push(size);
-    starBrightness.push(size * 0.6 + 0.4);
-    starTwinkleOff.push(Math.random() * Math.PI * 2);
-  }
+
+  // Band Gaussian: moderate σ = 28 % so the band is wide enough to look like
+  // a strip, not a hairline. Density ratio ≈ 4× (band centre vs background).
+  const band = Math.exp(-Math.pow(y / (starDistance * 0.28), 2) * 5.0);
+
+  // Background accept 20 %, band centre ~100 % → clearly denser stripe
+  if (Math.random() > 0.20 + band * 0.80) continue;
+
+  starPositions.push(x, y, z);
+
+  // Core brightness: smooth cosine falloff centered on CORE_THETA
+  // Affects star size/brightness but NOT density — no clustering.
+  const dTheta   = Math.abs(((theta - CORE_THETA + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+  const coreFactor = band * Math.max(0, Math.cos(Math.min(dTheta / 1.2, Math.PI * 0.5)));
+
+  const size = (Math.random() * 1.8 + 0.4) * (1.0 + band * 0.6 + coreFactor * 0.5);
+  starSizes.push(size);
+  starBrightness.push((size * 0.55 + 0.45) * (1.0 + band * 0.5 + coreFactor * 0.6));
+  starTwinkleOff.push(Math.random() * Math.PI * 2);
+
+  // Colour: blue/purple in band, warm orange-yellow near core region
+  const blue = band * (0.4 + Math.random() * 0.4);
+  const warm = coreFactor * (0.4 + Math.random() * 0.4);
+  starColors.push(
+    Math.min(1, 1.0 - blue * 0.18 + warm * 0.10),  // R
+    Math.min(1, 1.0 - blue * 0.10 - warm * 0.05),  // G
+    Math.min(1, 1.0 + blue * 0.28 - warm * 0.20)   // B
+  );
 }
 
 const starGeometry = new THREE.BufferGeometry();
@@ -288,9 +314,8 @@ starGeometry.setAttribute('position',      new THREE.Float32BufferAttribute(star
 starGeometry.setAttribute('size',          new THREE.Float32BufferAttribute(starSizes,       1));
 starGeometry.setAttribute('brightness',    new THREE.Float32BufferAttribute(starBrightness,  1));
 starGeometry.setAttribute('twinkleOffset', new THREE.Float32BufferAttribute(starTwinkleOff,  1));
+starGeometry.setAttribute('starColor',     new THREE.Float32BufferAttribute(starColors,       3));
 
-// Vertex shader: per-star twinkling via sin(time + offset).
-// Fragment shader: circular point disc discard + premultiplied alpha.
 const starMaterial = new THREE.ShaderMaterial({
   transparent: true,
   depthWrite: false,
@@ -302,12 +327,15 @@ const starMaterial = new THREE.ShaderMaterial({
     attribute float size;
     attribute float brightness;
     attribute float twinkleOffset;
+    attribute vec3  starColor;
     varying float vBrightness;
     varying float vTwinkle;
+    varying vec3  vColor;
     uniform float time;
     void main() {
       vBrightness = brightness;
       vTwinkle = sin(time * 1.5 + twinkleOffset) * 0.6 + 0.4;
+      vColor = clamp(starColor, 0.0, 1.0);
       vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
       gl_PointSize = size * 18.0 * (300.0 / -mvPosition.z);
       gl_Position = projectionMatrix * mvPosition;
@@ -316,18 +344,67 @@ const starMaterial = new THREE.ShaderMaterial({
   fragmentShader: `
     varying float vBrightness;
     varying float vTwinkle;
+    varying vec3  vColor;
     uniform float starVisibility;
     void main() {
       if (length(gl_PointCoord - vec2(0.5)) > 0.5) discard;
       float intensity = vBrightness * vTwinkle * starVisibility * 1.35;
-      gl_FragColor = vec4(vec3(intensity), intensity);
+      gl_FragColor = vec4(vColor * intensity, intensity);
+    }
+  `
+});
+
+// ── Milky Way dust / nebula layer ─────────────────────────────────────────────
+// 600 large soft blobs spread around the full galactic band. Blobs near the
+// galactic-core longitude (CORE_THETA) are slightly brighter, simulating the
+// denser central bulge without clustering positions.
+const dustPositions  = [];
+const dustOpacities  = [];
+
+for (let i = 0; i < 600; i++) {
+  const theta = Math.random() * Math.PI * 2;
+  const bandY = (Math.random() - 0.5) * starDistance * 0.28;
+  const r     = Math.sqrt(Math.max(0, starDistance * starDistance - bandY * bandY));
+  dustPositions.push(r * Math.cos(theta), bandY, r * Math.sin(theta));
+  // Smooth opacity boost near the galactic core longitude
+  const dTheta    = Math.abs(((theta - CORE_THETA + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+  const corePulse = Math.max(0, Math.cos(Math.min(dTheta / 1.2, Math.PI * 0.5)));
+  dustOpacities.push(0.09 + Math.random() * 0.05 + corePulse * 0.10);
+}
+
+const dustGeometry = new THREE.BufferGeometry();
+dustGeometry.setAttribute('position',    new THREE.Float32BufferAttribute(dustPositions, 3));
+dustGeometry.setAttribute('dustOpacity', new THREE.Float32BufferAttribute(dustOpacities, 1));
+
+const dustMaterial = new THREE.ShaderMaterial({
+  transparent: true,
+  depthWrite: false,
+  uniforms: { starVisibility: { value: 0 } },
+  vertexShader: `
+    attribute float dustOpacity;
+    varying float vDustOpacity;
+    void main() {
+      vDustOpacity = dustOpacity;
+      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+      gl_PointSize = 160.0 * (300.0 / -mvPosition.z);
+      gl_Position = projectionMatrix * mvPosition;
+    }
+  `,
+  fragmentShader: `
+    uniform float starVisibility;
+    varying float vDustOpacity;
+    void main() {
+      float d = length(gl_PointCoord - vec2(0.5)) * 2.0;
+      float alpha = (1.0 - smoothstep(0.0, 1.0, d)) * vDustOpacity * starVisibility;
+      gl_FragColor = vec4(0.70, 0.76, 1.0, alpha);
     }
   `
 });
 
 const starGroup = new THREE.Group();
-starGroup.rotation.z = 0.6; // tilt so Milky Way band runs diagonally
-starGroup.add(new THREE.Points(starGeometry, starMaterial));
+starGroup.rotation.z = 0.6; // tilt so Milky Way band runs diagonally across sky
+starGroup.add(new THREE.Points(dustGeometry,  dustMaterial));  // dust behind stars
+starGroup.add(new THREE.Points(starGeometry,  starMaterial));
 scene.add(starGroup);
 
 // =============================================================================
@@ -440,8 +517,9 @@ function updateSunPosition(lat, lon, date = new Date()) {
   skyDomeMat.uniforms.zenithColor.value.copy(_zenithCol);
 
   // Stars fade in during twilight (-6° to -14°)
-  starMaterial.uniforms.starVisibility.value =
-    THREE.MathUtils.clamp((-altitude - 0.1) / 0.15, 0, 1);
+  const starVis = THREE.MathUtils.clamp((-altitude - 0.1) / 0.15, 0, 1);
+  starMaterial.uniforms.starVisibility.value = starVis;
+  dustMaterial.uniforms.starVisibility.value = starVis;
 
   // Star rotation tied to simulation hours; cloud offset also driven by sim hours
   const hours = date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;

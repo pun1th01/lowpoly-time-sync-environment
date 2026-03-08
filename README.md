@@ -61,7 +61,7 @@ Use the time slider at the bottom to scrub through any hour of the day, or step 
 | **Dynamic sky colours** | Four-stage altitude blend: day → sunset → twilight → night |
 | **Sky gradient dome** | Inverted sphere with a zenith/horizon GLSL gradient |
 | **Procedural clouds** | 3-octave FBM value noise rendered in the sky dome fragment shader; drift tied to simulation time |
-| **Star field** | 6 000 candidate positions on a sphere; ~4 000 accepted with random sizes, per-vertex twinkling, and a Milky Way band density bias |
+| **Star field** | 18 000 candidates on a sphere; Gaussian band density bias (~4× denser along galactic plane), per-star colour tinting (blue/purple in band, warm near galactic core), twinkling via ShaderMaterial, plus a 600-point soft dust/nebula layer |
 | **Geolocation** | Optional browser geolocation; falls back to Bangalore (12.97° N, 77.59° E) |
 | **Time slider UI** | Glassmorphism panel; slider, ±Day buttons, and Reset |
 | **Auto time advance** | Simulation clock advances 1 minute per real-world minute when the slider is idle |
@@ -123,7 +123,7 @@ This produces correct crescent, quarter, gibbous, and full moon appearances as t
 
 ### Star Field
 
-6 000 candidate positions are distributed uniformly on a sphere. Acceptance probability is biased by a Gaussian function of the equatorial distance, producing a denser band — the Milky Way. Per-star size, brightness, and twinkle phase are stored as custom attributes and consumed in a `ShaderMaterial` points renderer. Stars fade in during the `-0.1` to `-0.25` rad twilight window.
+18 000 candidate positions are distributed uniformly on a sphere. Acceptance probability is biased by a Gaussian function of equatorial distance (σ ≈ 28 % of sphere radius), producing a clearly visible Milky Way band spanning the full sky arc at ~4× background density. Per-star attributes — size, brightness, twinkle phase, and RGB colour tint — are stored as `BufferGeometry` custom attributes and consumed in a `ShaderMaterial` points renderer. Stars in the band shift toward blue/purple; a smooth brightness gradient along the band simulates the brighter galactic-centre region without clustering. A second `Points` layer of 600 large soft-glow blobs forms a diffuse dust/nebula overlay along the same band. All stars and dust fade in during the `-0.1` to `-0.25` rad twilight window.
 
 ### Time Synchronization
 
