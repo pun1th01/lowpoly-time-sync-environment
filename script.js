@@ -154,6 +154,7 @@ const skyDomeMat = new THREE.ShaderMaterial({
   `
 });
 const skyDome = new THREE.Mesh(skyDomeGeo, skyDomeMat);
+skyDome.renderOrder = 0;
 scene.add(skyDome);
 
 // Sky background colour constants — blended each frame based on sun altitude
@@ -355,38 +356,55 @@ const starMaterial = new THREE.ShaderMaterial({
 });
 
 // ── Milky Way dust / nebula layer ─────────────────────────────────────────────
-// 600 large soft blobs spread around the full galactic band. Blobs near the
-// galactic-core longitude (CORE_THETA) are slightly brighter, simulating the
-// denser central bulge without clustering positions.
+// 2200 overlapping soft blobs spread around the full galactic band. Per-particle
+// size variation breaks up uniformity so the band looks like natural cloud
+// structure rather than a grid of identical dots.
 const dustPositions  = [];
 const dustOpacities  = [];
+const dustSizes      = [];
 
-for (let i = 0; i < 600; i++) {
-  const theta = Math.random() * Math.PI * 2;
-  const bandY = (Math.random() - 0.5) * starDistance * 0.28;
-  const r     = Math.sqrt(Math.max(0, starDistance * starDistance - bandY * bandY));
-  dustPositions.push(r * Math.cos(theta), bandY, r * Math.sin(theta));
+for (let i = 0; i < 2200; i++) {
+  // phi: full azimuth — particles wrap all the way around the sky dome
+  const phi = Math.random() * Math.PI * 2;
+  // elev: elevation angle from the galactic plane.
+  // Cubic falloff (t^3) concentrates >90% of particles within ±0.05 rad of
+  // the plane, with a long but sparse tail out to ±0.15 rad — forming a thin
+  // bright core with soft diffuse edges, not a uniform cloud.
+  const t    = (Math.random() - 0.5) * 2.0;  // uniform [-1, 1]
+  const elev = t * t * t * 0.15;              // cubic → max ±0.15 rad (≈±8.6°)
+
+  dustPositions.push(
+    starDistance * Math.cos(elev) * Math.cos(phi),
+    starDistance * Math.sin(elev),
+    starDistance * Math.cos(elev) * Math.sin(phi)
+  );
   // Smooth opacity boost near the galactic core longitude
-  const dTheta    = Math.abs(((theta - CORE_THETA + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
-  const corePulse = Math.max(0, Math.cos(Math.min(dTheta / 1.2, Math.PI * 0.5)));
-  dustOpacities.push(0.09 + Math.random() * 0.05 + corePulse * 0.10);
+  const dPhi     = Math.abs(((phi - CORE_THETA + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+  const corePulse = Math.max(0, Math.cos(Math.min(dPhi / 1.2, Math.PI * 0.5)));
+  const variation = 0.5 + Math.random() * 0.5;  // 0.5–1.0× brightness modulation
+  dustOpacities.push((0.02 + Math.random() * 0.02 + corePulse * 0.01) * variation);
+  // Size variation: 0.7–1.3× base so blobs differ visually
+  dustSizes.push(1800.0 * (0.7 + Math.random() * 0.6));
 }
 
 const dustGeometry = new THREE.BufferGeometry();
 dustGeometry.setAttribute('position',    new THREE.Float32BufferAttribute(dustPositions, 3));
 dustGeometry.setAttribute('dustOpacity', new THREE.Float32BufferAttribute(dustOpacities, 1));
+dustGeometry.setAttribute('dustSize',    new THREE.Float32BufferAttribute(dustSizes,     1));
 
 const dustMaterial = new THREE.ShaderMaterial({
   transparent: true,
   depthWrite: false,
+  blending: THREE.AdditiveBlending,
   uniforms: { starVisibility: { value: 0 } },
   vertexShader: `
     attribute float dustOpacity;
+    attribute float dustSize;
     varying float vDustOpacity;
     void main() {
       vDustOpacity = dustOpacity;
       vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-      gl_PointSize = 160.0 * (300.0 / -mvPosition.z);
+      gl_PointSize = dustSize * (300.0 / -mvPosition.z);
       gl_Position = projectionMatrix * mvPosition;
     }
   `,
@@ -394,8 +412,8 @@ const dustMaterial = new THREE.ShaderMaterial({
     uniform float starVisibility;
     varying float vDustOpacity;
     void main() {
-      float d = length(gl_PointCoord - vec2(0.5)) * 2.0;
-      float alpha = (1.0 - smoothstep(0.0, 1.0, d)) * vDustOpacity * starVisibility;
+      float d = length(gl_PointCoord - vec2(0.5));
+      float alpha = smoothstep(0.55, 0.10, d) * vDustOpacity * starVisibility;
       gl_FragColor = vec4(0.70, 0.76, 1.0, alpha);
     }
   `
@@ -403,6 +421,74 @@ const dustMaterial = new THREE.ShaderMaterial({
 
 const starGroup = new THREE.Group();
 starGroup.rotation.z = 0.6; // tilt so Milky Way band runs diagonally across sky
+starGroup.renderOrder = 1;
+
+// ── Galactic haze mesh ────────────────────────────────────────────────────────
+// A large sphere slightly inside the star sphere whose fragment shader generates
+// FBM noise concentrated around the equatorial plane (y ≈ 0 in local space).
+// This provides the continuous soft-glow background that individual particles
+// cannot produce on their own. Additive blending keeps it purely additive.
+const hazeMaterial = new THREE.ShaderMaterial({
+  transparent: true,
+  depthWrite: false,
+  side: THREE.BackSide,
+  blending: THREE.AdditiveBlending,
+  uniforms: { starVisibility: { value: 0 } },
+  vertexShader: `
+    varying vec3 vLocalPos;
+    void main() {
+      vLocalPos   = position;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform float starVisibility;
+    varying vec3 vLocalPos;
+
+    // Cheap 2-D hash for FBM noise
+    float hash(vec2 p) {
+      p = fract(p * vec2(127.1, 311.7));
+      p += dot(p, p + 17.5);
+      return fract(p.x * p.y);
+    }
+    float noise(vec2 p) {
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      return mix(mix(hash(i),          hash(i + vec2(1,0)), u.x),
+                 mix(hash(i + vec2(0,1)), hash(i + vec2(1,1)), u.x), u.y);
+    }
+    float fbm(vec2 p) {
+      float v = 0.0, a = 0.5;
+      for (int i = 0; i < 4; i++) {
+        v += a * noise(p);
+        p *= 2.1;
+        a *= 0.5;
+      }
+      return v;
+    }
+
+    void main() {
+      vec3 dir = normalize(vLocalPos);
+      // Galactic latitude — dir.y is elevation from the equatorial plane
+      float lat  = abs(dir.y);
+      // Sharp Gaussian band: only visible within ±0.18 rad of plane
+      float band = exp(-lat * lat * 120.0);
+      // FBM noise on azimuth × patchy vertical offset
+      vec2 uv    = vec2(atan(dir.z, dir.x) * 0.8, dir.y * 6.0);
+      float haze = fbm(uv * 2.5) * fbm(uv * 0.9 + 1.7);
+      float alpha = band * haze * 0.045 * starVisibility;
+      gl_FragColor = vec4(0.68, 0.74, 1.0, alpha);
+    }
+  `
+});
+const hazeSphere = new THREE.Mesh(
+  new THREE.SphereGeometry(starDistance * 0.97, 48, 24),
+  hazeMaterial
+);
+starGroup.add(hazeSphere);              // rendered before dust and star points
+// ─────────────────────────────────────────────────────────────────────────────
+
 starGroup.add(new THREE.Points(dustGeometry,  dustMaterial));  // dust behind stars
 starGroup.add(new THREE.Points(starGeometry,  starMaterial));
 scene.add(starGroup);
@@ -518,8 +604,10 @@ function updateSunPosition(lat, lon, date = new Date()) {
 
   // Stars fade in during twilight (-6° to -14°)
   const starVis = THREE.MathUtils.clamp((-altitude - 0.1) / 0.15, 0, 1);
+  const nebulaVisibility = Math.pow(starVis, 1.5);
   starMaterial.uniforms.starVisibility.value = starVis;
-  dustMaterial.uniforms.starVisibility.value = starVis;
+  dustMaterial.uniforms.starVisibility.value  = nebulaVisibility;
+  hazeMaterial.uniforms.starVisibility.value  = nebulaVisibility;
 
   // Star rotation tied to simulation hours; cloud offset also driven by sim hours
   const hours = date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
