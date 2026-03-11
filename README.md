@@ -80,6 +80,7 @@ Use the time slider at the bottom to scrub through any hour of the day, or step 
 | **Geolocation** | Optional browser geolocation; falls back to Bangalore (12.97° N, 77.59° E) |
 | **Time slider UI** | Glassmorphism panel; slider, ±Day buttons, and Reset; responsive layout for mobile |
 | **Auto time advance** | Simulation clock advances 1 minute per real-world minute when the slider is idle; pauses for 10 s after any interaction |
+| **Adaptive GPU rendering** | Automatically scales star density based on detected WebGL capability to maintain compatibility with low-end hardware while preserving full visual fidelity on modern devices |
 
 ---
 

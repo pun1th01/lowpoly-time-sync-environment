@@ -259,6 +259,35 @@ scene.add(moonGlow);
 // STAR SYSTEM
 // =============================================================================
 
+// ---------------------------------------------------------------------------
+// getStarCount — inspect renderer capabilities and return the appropriate
+// candidate-generation count for the rejection-sampling star loop.
+// The rejection sampler keeps roughly 35–40 % of candidates, so the final
+// rendered star count is lower than the number returned here.
+// ---------------------------------------------------------------------------
+function getStarCount(renderer) {
+  const caps = renderer.capabilities;
+  const isWebGL2        = caps.isWebGL2;           // true on modern GPUs
+  const maxUniforms     = caps.maxVertexUniforms;  // low on old/integrated GPUs
+  const maxAttributes   = caps.maxVertexAttribs;   // typically 16, older HW may have 8
+
+  const isLow    = !isWebGL2 || maxUniforms < 1024 || maxAttributes < 12;
+  const isMedium = !isLow && (maxUniforms < 4096 || !isWebGL2);
+
+  if (isLow) {
+    console.log('Sky Renderer Mode: LOW END — using reduced star count (2000)');
+    return 2000;
+  }
+  if (isMedium) {
+    console.log('Sky Renderer Mode: MEDIUM — using reduced star count (8000)');
+    return 8000;
+  }
+  console.log('Sky Renderer Mode: HIGH — using full star count (18000)');
+  return 18000;
+}
+
+const STAR_CANDIDATE_COUNT = getStarCount(renderer);
+
 // Stars are placed on a sphere using rejection sampling.
 // The Milky Way appears as a FULL RING spanning the whole sky dome, tilted by
 // rotation.z so it runs diagonally. Density is controlled by a band Gaussian
@@ -273,7 +302,7 @@ const starBrightness = [];
 const starTwinkleOff = [];
 const starColors     = [];
 
-for (let i = 0; i < 18000; i++) {
+for (let i = 0; i < STAR_CANDIDATE_COUNT; i++) {
   // Uniform random point on sphere
   const theta = Math.random() * Math.PI * 2;
   const phi   = Math.acos(2 * Math.random() - 1);
