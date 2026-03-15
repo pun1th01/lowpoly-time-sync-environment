@@ -2,6 +2,10 @@
 
 A real-time low-poly 3D environment built with **Three.js** where sky lighting, sun and moon positions, moon phases, stars, the Milky Way, and procedural clouds all synchronize with the user's actual geographic location and time of day.
 
+## Demonstration
+
+![Full Day Cycle Demo](assets/gif/day-cycle.gif)
+
 ---
 
 ## What This Project Does
@@ -288,9 +292,10 @@ lowpoly-time-sync-environment/
 ## Future Improvements
 
 - [x] Mobile support — responsive layout and touch-friendly slider controls
-- [ ] Physically-based atmosphere — Rayleigh/Mie scattering for more accurate sunset colours
-- [ ] Visual improvements — enhanced cloud detail, softer star glow, smoother horizon blending
-- [ ] Visual fixes — reduce sky banding at night, improve moon glow intensity scaling at different phases
+- [x] Visual improvements — enhanced cloud detail, softer star glow, smoother horizon blending
+- [x] Visual fixes — reduce sky banding at night, improve moon glow intensity scaling at different phases
+- [ ] Region selector — allow users to explore the sky from different cities around the world
+- [ ] Date change UI — allow users to change the calendar date to observe seasonal sky changes
 
 ---
 
