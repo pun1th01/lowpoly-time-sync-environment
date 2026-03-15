@@ -4,7 +4,7 @@ A real-time low-poly 3D environment built with **Three.js** where sky lighting, 
 
 ## Demonstration
 
-![Full Day Cycle Demo](assets/gif/day-cycle.gif)
+![Full Day Cycle Demo](assets/gif/transition.gif)
 
 ---
 
@@ -260,6 +260,8 @@ lowpoly-time-sync-environment/
 ├── script.js               # All Three.js scene logic
 │
 ├── assets/
+│   ├── gif/
+│   │   └── transition.gif  # Full day cycle demonstration
 │   ├── models/
 │   │   └── scenery.glb     # Low-poly landscape (GLTF binary)
 │   └── screenshots/        # Repository screenshots
