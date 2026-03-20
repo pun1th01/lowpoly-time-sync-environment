@@ -998,6 +998,10 @@ function buildTimeUI() {
       transition: all 0.2s ease;
     }
 
+    #time-controls .glass-dropdown {
+      z-index: 10000;
+    }
+
     #time-controls .control-stack.open > .glass-dropdown,
     #time-controls .control-stack.open > .glass-calendar {
       opacity: 1;
@@ -1274,6 +1278,7 @@ function buildTimeUI() {
       #time-controls.expanded {
         max-height: 70vh;
         overflow-y: auto;
+        overflow-x: visible;
       }
       #time-controls .top-row,
       #time-controls .bottom-row {
@@ -1296,6 +1301,50 @@ function buildTimeUI() {
       #time-controls #btn-next-day,
       #time-controls #btn-reset {
         width: 100%;
+      }
+    }
+
+    @media (max-width: 768px) {
+      #time-controls #calendar-popover {
+        position: fixed;
+        left: 50%;
+        top: 45%;
+        bottom: auto;
+        right: auto;
+        width: min(92vw, 360px);
+        max-height: 80vh;
+        overflow-y: auto;
+        padding-bottom: env(safe-area-inset-bottom);
+        transform: translate(-50%, -50%) scale(0.95);
+        z-index: 9999;
+      }
+
+      #time-controls #date-stack.open > #calendar-popover {
+        transform: translate(-50%, -50%) scale(1);
+      }
+
+      #time-controls #date-stack.open-up > #calendar-popover,
+      #time-controls #date-stack.open.open-up > #calendar-popover {
+        top: 45%;
+        bottom: auto;
+        transform: translate(-50%, -50%) scale(1);
+      }
+
+      #time-controls .calendar-days,
+      #time-controls .calendar-weekdays {
+        gap: 6px;
+      }
+
+      #time-controls .calendar-day {
+        height: 32px;
+        font-size: 12px;
+      }
+
+      #time-controls .glass-dropdown {
+        max-height: 200px;
+        overflow-y: auto;
+        left: 0;
+        right: auto;
       }
     }
   `;
@@ -1804,6 +1853,18 @@ function buildTimeUI() {
       setStackOpen(yearStackEl, yearTriggerEl, yearMenuEl, false);
     }
   });
+
+  document.addEventListener('touchstart', (e) => {
+    if (!dateStackEl.contains(e.target) && dateStackEl.classList.contains('open')) {
+      setStackOpen(dateStackEl, dateTriggerEl, document.getElementById('calendar-popover'), false);
+    }
+    if (!monthStackEl.contains(e.target) && monthStackEl.classList.contains('open')) {
+      setStackOpen(monthStackEl, monthTriggerEl, monthMenuEl, false);
+    }
+    if (!yearStackEl.contains(e.target) && yearStackEl.classList.contains('open')) {
+      setStackOpen(yearStackEl, yearTriggerEl, yearMenuEl, false);
+    }
+  }, { passive: true });
 
   // Keep panel expansion intentional: only the sheet handle toggles in mobile mode.
   sheetHandleEl.addEventListener('click', (e) => {

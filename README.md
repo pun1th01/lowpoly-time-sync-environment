@@ -89,6 +89,9 @@ Use the time slider at the bottom to scrub through any hour of the day, or step 
 - 🧭 Calendar dropdowns stay closed until explicitly opened by user
 - 🧊 Improved dropdown layering/click behavior for more reliable interactions
 - 🌍 Improved location reset/feedback flow between manual city and geolocation
+- 📱 Mobile calendar responsiveness improvements (centered, scrollable, and viewport-safe)
+- 📐 Mobile spacing refinements to reduce overlap with bottom-sheet controls
+- 🧷 Calendar/dropdown clipping and overflow safeguards on small screens
 
 | Feature | Description |
 |---|---|
@@ -133,6 +136,12 @@ Use the time slider at the bottom to scrub through any hour of the day, or step 
 - Selected date highlight behavior refined to avoid conflicting active-day states
 - More predictable dropdown visibility and layering across desktop/mobile interactions
 - Improved reset/location feedback to avoid incorrect "Your Location" state messaging
+- Mobile calendar now centers within the viewport and remains fully visible on small screens
+- Mobile calendar supports scroll when vertical space is limited to prevent clipping
+- Improved touch interaction for mobile calendar open/close and outside-tap behavior
+- Better mobile spacing to avoid overlap with bottom-sheet control panel
+- Custom month/year glass dropdown flow stabilized (no unintended auto-open, reliable selection updates)
+- Fixed layering/z-index conflicts between calendar popover and dropdown menus
 
 ---
 
