@@ -68,6 +68,18 @@ Use the time slider at the bottom to scrub through any hour of the day, or step 
 
 ## Features
 
+### ✨ Recent Feature Additions
+
+- 🌍 Real-time sun and moon positioning using SunCalc
+- 🕒 Time-synced sky based on user location
+- 🏙️ City selection with global coverage
+- 📱 Mobile-friendly bottom-sheet UI
+- 🧊 Glassmorphism control panel
+- 📅 Custom calendar UI (no native date input)
+- 🎚️ Interactive time slider
+- 🔄 Reset to real location
+- 🏷️ Animated city/location overlay (fade in/out)
+
 | Feature | Description |
 |---|---|
 | **Real sun positioning** | SunCalc computes altitude and azimuth from GPS coordinates and the current date/time |
@@ -83,8 +95,23 @@ Use the time slider at the bottom to scrub through any hour of the day, or step 
 | **Adaptive FOV** | Camera field of view widens automatically on portrait / narrow viewports to preserve the scene framing |
 | **Geolocation** | Optional browser geolocation; falls back to Bangalore (12.97° N, 77.59° E) |
 | **Time slider UI** | Glassmorphism panel; slider, ±Day buttons, and Reset; responsive layout for mobile |
+| **Custom city selector** | Global city list with manual-city priority over geolocation/fallback, plus reset back to geolocation |
+| **Custom calendar UI** | In-panel calendar popover with month/year navigation; replaces native date picker |
+| **Mobile bottom-sheet controls** | Collapsible touch-friendly control panel for small screens |
+| **Adaptive dropdown positioning** | Dropdowns/calendars open up/down based on viewport space to avoid clipping |
+| **City/location overlay** | Temporary non-blocking fade text for city changes and “Your Location” feedback |
 | **Auto time advance** | Simulation clock advances 1 minute per real-world minute when the slider is idle; pauses for 10 s after any interaction |
 | **Adaptive GPU rendering** | Automatically scales star density based on detected WebGL capability to maintain compatibility with low-end hardware while preserving full visual fidelity on modern devices |
+
+---
+
+## 🎨 UI / UX Improvements
+
+- Bottom-sheet panel for mobile (collapsible)
+- Adaptive dropdown positioning to prevent clipping near screen edges
+- Touch-friendly controls for sliders, buttons, and overlays
+- Smooth transitions across panel, popovers, and overlays
+- Non-blocking overlay feedback system for city/geolocation changes
 
 ---
 
@@ -236,6 +263,24 @@ http://localhost:8000
 ```
 
 > **Why a server?** Three.js ES modules and GLB loading require an HTTP context; opening `index.html` directly via `file://` will not work.
+
+---
+
+## 🛠 Usage
+
+- Select a city to simulate that location's sky
+- Use the time slider to scrub through the day
+- Use the date picker to change day/month/year
+- Click **Reset** to return to your real location
+- Select **Use My Location** anytime to switch back to geolocation
+
+---
+
+## 📱 Mobile Support
+
+- Responsive design for desktop, tablet, and mobile
+- Bottom-sheet control panel optimized for smaller screens
+- Touch interactions for slider, dropdowns, and calendar
 
 ---
 

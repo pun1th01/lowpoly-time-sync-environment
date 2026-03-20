@@ -37,9 +37,86 @@ document.body.appendChild(renderer.domElement);
 // =============================================================================
 
 let simulationTime = new Date();
-let currentLat = 12.9716;
-let currentLon = 77.5946;
+const FALLBACK_LOCATION = { name: 'Bangalore', lat: 12.9716, lon: 77.5946 };
+const CITY_DATASET = [
+  { name: 'Bangalore', country: 'India', lat: 12.9716, lon: 77.5946 },
+  { name: 'Mumbai', country: 'India', lat: 19.0760, lon: 72.8777 },
+  { name: 'Delhi', country: 'India', lat: 28.6139, lon: 77.2090 },
+  { name: 'New York', country: 'USA', lat: 40.7128, lon: -74.0060 },
+  { name: 'Los Angeles', country: 'USA', lat: 34.0522, lon: -118.2437 },
+  { name: 'Chicago', country: 'USA', lat: 41.8781, lon: -87.6298 },
+  { name: 'London', country: 'UK', lat: 51.5074, lon: -0.1278 },
+  { name: 'Paris', country: 'France', lat: 48.8566, lon: 2.3522 },
+  { name: 'Berlin', country: 'Germany', lat: 52.5200, lon: 13.4050 },
+  { name: 'Tokyo', country: 'Japan', lat: 35.6762, lon: 139.6503 },
+  { name: 'Singapore', country: 'Singapore', lat: 1.3521, lon: 103.8198 },
+  { name: 'Dubai', country: 'UAE', lat: 25.2048, lon: 55.2708 },
+  { name: 'Sydney', country: 'Australia', lat: -33.8688, lon: 151.2093 },
+  { name: 'Cape Town', country: 'South Africa', lat: -33.9249, lon: 18.4241 },
+  { name: 'Cairo', country: 'Egypt', lat: 30.0444, lon: 31.2357 },
+  { name: 'São Paulo', country: 'Brazil', lat: -23.5505, lon: -46.6333 },
+  { name: 'Buenos Aires', country: 'Argentina', lat: -34.6037, lon: -58.3816 }
+];
+const CITY_LOCATIONS = Object.fromEntries(
+  CITY_DATASET.map((city) => [city.name, { lat: city.lat, lon: city.lon }])
+);
+
+let currentLat = FALLBACK_LOCATION.lat;
+let currentLon = FALLBACK_LOCATION.lon;
+let geoLat = null;
+let geoLon = null;
+let geolocationGranted = false;
+let locationMode = 'fallback'; // 'manual-city' | 'geolocation' | 'fallback'
+let activeCityName = null;
 let cloudSimOffset = 0; // hours-based offset so the slider visibly shifts cloud position
+let controlsApi = null;
+
+const locationTransition = {
+  active: false,
+  startMs: 0,
+  durationMs: 0,
+  fromLat: currentLat,
+  fromLon: currentLon,
+  toLat: currentLat,
+  toLon: currentLon
+};
+
+function notifyControlsLocation() {
+  if (controlsApi && typeof controlsApi.updateLocationStatus === 'function') {
+    controlsApi.updateLocationStatus();
+  }
+}
+
+function smoothstep01(t) {
+  return t * t * (3 - 2 * t);
+}
+
+function startLocationTransition(nextLat, nextLon, durationMs = 1200) {
+  locationTransition.active = true;
+  locationTransition.startMs = performance.now();
+  locationTransition.durationMs = durationMs;
+  locationTransition.fromLat = currentLat;
+  locationTransition.fromLon = currentLon;
+  locationTransition.toLat = nextLat;
+  locationTransition.toLon = nextLon;
+}
+
+function setLocationSource(mode, lat, lon, options = {}) {
+  const { smooth = true, cityName = null } = options;
+  locationMode = mode;
+  activeCityName = cityName;
+
+  if (smooth) {
+    startLocationTransition(lat, lon, 1200);
+  } else {
+    locationTransition.active = false;
+    currentLat = lat;
+    currentLon = lon;
+  }
+
+  notifyControlsLocation();
+  refreshSun();
+}
 
 function refreshSun() {
   updateSunPosition(currentLat, currentLon, simulationTime);
@@ -182,6 +259,7 @@ const sunSphere = new THREE.Mesh(
   new THREE.MeshBasicMaterial({ color: 0xffdd66, transparent: true })
 );
 sunSphere.scale.setScalar(1.25);
+sunSphere.visible = false;
 scene.add(sunSphere);
 
 // Moon — ShaderMaterial renders the lunar phase by comparing view-space surface
@@ -242,6 +320,7 @@ const sunGlowMaterial = new THREE.SpriteMaterial({
 });
 const sunGlow = new THREE.Sprite(sunGlowMaterial);
 sunGlow.scale.set(5500, 5500, 1);
+sunGlow.visible = false;
 scene.add(sunGlow);
 
 const moonGlowMaterial = new THREE.SpriteMaterial({
@@ -253,6 +332,7 @@ const moonGlowMaterial = new THREE.SpriteMaterial({
 });
 const moonGlow = new THREE.Sprite(moonGlowMaterial);
 moonGlow.scale.set(3200, 3200, 1);
+moonGlow.visible = false;
 scene.add(moonGlow);
 
 // =============================================================================
@@ -698,16 +778,39 @@ function loadEnvironmentModel() {
 // =============================================================================
 
 function initGeolocation() {
+  // Render immediately with fallback so celestial objects never sit in a neutral/incorrect default pose.
+  setLocationSource('fallback', FALLBACK_LOCATION.lat, FALLBACK_LOCATION.lon, {
+    smooth: false,
+    cityName: FALLBACK_LOCATION.name
+  });
+
   navigator.geolocation.getCurrentPosition(
     (pos) => {
-      currentLat = pos.coords.latitude;
-      currentLon = pos.coords.longitude;
-      console.log('Geolocation acquired — Lat:', currentLat, 'Lon:', currentLon);
-      refreshSun();
+      geoLat = pos.coords.latitude;
+      geoLon = pos.coords.longitude;
+      geolocationGranted = true;
+      console.log('Geolocation acquired — Lat:', geoLat, 'Lon:', geoLon);
+
+      if (locationMode !== 'manual-city') {
+        setLocationSource('geolocation', geoLat, geoLon, { smooth: true, cityName: null });
+      } else {
+        notifyControlsLocation();
+      }
     },
     (err) => {
       console.warn('Geolocation denied, using fallback (Bangalore):', err.message);
-      refreshSun();
+      geolocationGranted = false;
+      geoLat = null;
+      geoLon = null;
+
+      if (locationMode !== 'manual-city') {
+        setLocationSource('fallback', FALLBACK_LOCATION.lat, FALLBACK_LOCATION.lon, {
+          smooth: false,
+          cityName: FALLBACK_LOCATION.name
+        });
+      } else {
+        notifyControlsLocation();
+      }
     }
   );
 }
@@ -723,100 +826,735 @@ function buildTimeUI() {
   let userInteractionTimeout;
   const style = document.createElement('style');
   style.textContent = `
+    html, body {
+      overflow-x: hidden;
+    }
+
     #time-controls {
       position: fixed;
-      bottom: 24px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      align-items: center;
+      bottom: 22px;
+      left: max(10px, calc(50% - 480px));
+      right: max(10px, calc(50% - 480px));
+      display: grid;
       gap: 12px;
-      padding: 14px 24px;
-      background: rgba(255,255,255,0.08);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(255,255,255,0.18);
-      border-radius: 16px;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+      padding: 14px;
+      width: auto;
+      background:
+        linear-gradient(135deg, rgba(112, 165, 203, 0.16), rgba(52, 89, 120, 0.06)),
+        rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(12px) saturate(140%);
+      -webkit-backdrop-filter: blur(12px) saturate(140%);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 18px;
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.25);
       color: #fff;
-      font-family: sans-serif;
+      font-family: 'Segoe UI', 'Trebuchet MS', sans-serif;
       font-size: 13px;
       user-select: none;
-      z-index: 100;
-      max-width: calc(100vw - 32px);
+      z-index: 110;
+      box-sizing: border-box;
+      overflow: visible;
+      transition: transform 180ms ease, box-shadow 220ms ease, border-color 220ms ease;
+    }
+    #time-controls:hover {
+      border-color: rgba(255, 255, 255, 0.26);
+      box-shadow: 0 22px 56px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.32);
+      transform: translateY(-1px);
+    }
+    #time-controls .top-row,
+    #time-controls .bottom-row {
+      display: grid;
+      gap: 10px;
+      align-items: center;
+    }
+    #time-controls .top-row {
+      grid-template-columns: 1.6fr 1fr 1fr;
+    }
+    #time-controls .bottom-row {
+      grid-template-columns: auto 1fr auto auto;
+    }
+    #time-controls .control-group {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+    #time-controls .control-label {
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      opacity: 0.92;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: #f2f7ff;
+    }
+
+    #time-controls .control-stack {
+      position: relative;
+      min-width: 0;
+      overflow: visible;
+    }
+
+    #time-controls button,
+    #time-controls input,
+    #time-controls .field-shell {
+      height: 38px;
+      border-radius: 10px;
+      border: 1px solid rgba(226, 241, 255, 0.28);
+      background: rgba(255, 255, 255, 0.12);
+      color: #f4f8ff;
+      outline: none;
+      transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease, transform 180ms ease;
       box-sizing: border-box;
     }
-    #time-controls button {
-      padding: 6px 14px;
-      background: rgba(255,255,255,0.15);
-      border: 1px solid rgba(255,255,255,0.25);
-      border-radius: 8px;
-      color: #fff;
-      font-size: 13px;
-      cursor: pointer;
-      transition: background 0.2s;
-      white-space: nowrap;
-      min-height: 36px;
-    }
-    #time-controls button:hover { background: rgba(255,255,255,0.28); }
-    #time-slider { width: 180px; accent-color: #ffcc66; cursor: pointer; }
-    #time-label  { min-width: 110px; text-align: center; opacity: 0.9; white-space: nowrap; }
 
-    @media (max-width: 540px) {
+    #time-controls button {
+      padding: 0 14px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    #time-controls button:hover,
+    #time-controls .field-shell:hover,
+    #time-controls input[type="number"]:hover {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: rgba(255, 255, 255, 0.42);
+      transform: translateY(-1px);
+    }
+
+    #time-controls button:focus-visible,
+    #time-controls .field-shell:focus-visible,
+    #time-controls input:focus-visible {
+      border-color: rgba(182, 224, 255, 0.9);
+      box-shadow: 0 0 0 2px rgba(104, 176, 255, 0.33);
+    }
+
+    #time-controls input[type="number"] {
+      width: 100%;
+      padding: 0 10px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+
+    #time-controls input[type="number"] {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    #time-controls .glass-trigger {
+      width: 100%;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(226, 241, 255, 0.28);
+      background: rgba(255, 255, 255, 0.12);
+      color: #f8fbff;
+      text-align: left;
+      padding: 0 12px;
+    }
+
+    #time-controls .glass-trigger .chevron {
+      font-size: 12px;
+      opacity: 0.9;
+      transform-origin: 50% 50%;
+      transition: transform 180ms ease;
+    }
+
+    #time-controls .control-stack.open .glass-trigger .chevron {
+      transform: rotate(180deg);
+    }
+
+    #time-controls .glass-dropdown,
+    #time-controls .glass-calendar {
+      position: absolute;
+      top: calc(100% + 8px);
+      bottom: auto;
+      left: 0;
+      right: 0;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(10, 18, 30, 0.84);
+      backdrop-filter: blur(12px) saturate(135%);
+      -webkit-backdrop-filter: blur(12px) saturate(135%);
+      box-shadow: 0 18px 36px rgba(0, 0, 0, 0.45);
+      z-index: 9999;
+      opacity: 0;
+      transform: translateY(10px) scale(0.95);
+      pointer-events: none;
+      transition: all 0.2s ease;
+    }
+
+    #time-controls .control-stack.open .glass-dropdown,
+    #time-controls .control-stack.open .glass-calendar {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+    }
+
+    #time-controls .control-stack.open-up .glass-dropdown,
+    #time-controls .control-stack.open-up .glass-calendar {
+      top: auto;
+      bottom: calc(100% + 8px);
+      transform: translateY(-10px) scale(0.95);
+    }
+
+    #time-controls .control-stack.open.open-up .glass-dropdown,
+    #time-controls .control-stack.open.open-up .glass-calendar {
+      transform: translateY(0) scale(1);
+    }
+
+    #time-controls .glass-option {
+      width: 100%;
+      height: 36px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: #f7fbff;
+      text-align: left;
+      padding: 0 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    #time-controls .glass-option:hover {
+      background: rgba(161, 207, 255, 0.2);
+      transform: none;
+    }
+
+    #time-controls .glass-option.is-selected {
+      background: rgba(130, 191, 255, 0.32);
+      color: #ffffff;
+    }
+
+    #time-controls .glass-dropdown {
+      padding: 8px;
+      display: grid;
+      gap: 4px;
+      max-height: 250px;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+    }
+
+    #time-controls .glass-calendar {
+      width: min(320px, calc(100vw - 28px));
+      right: auto;
+      padding: 10px;
+    }
+
+    #time-controls .calendar-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    #time-controls .calendar-nav {
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.08);
+      color: #f7fbff;
+    }
+
+    #time-controls .calendar-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f7fbff;
+      letter-spacing: 0.02em;
+    }
+
+    #time-controls .calendar-weekdays,
+    #time-controls .calendar-days {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 4px;
+    }
+
+    #time-controls .calendar-weekday {
+      font-size: 11px;
+      color: rgba(240, 247, 255, 0.72);
+      text-align: center;
+      padding: 4px 0;
+      font-weight: 600;
+    }
+
+    #time-controls .calendar-day {
+      width: 100%;
+      height: 32px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: #f5faff;
+      padding: 0;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    #time-controls .calendar-day.muted {
+      color: rgba(200, 215, 232, 0.45);
+    }
+
+    #time-controls .calendar-day.today {
+      border-color: rgba(179, 220, 255, 0.65);
+      background: rgba(114, 178, 236, 0.22);
+    }
+
+    #time-controls .calendar-day.selected {
+      background: rgba(143, 204, 255, 0.4);
+      border-color: rgba(208, 236, 255, 0.8);
+      color: #ffffff;
+    }
+
+    #time-controls .calendar-day:hover {
+      background: rgba(161, 207, 255, 0.2);
+      transform: none;
+    }
+
+    #time-controls #time-slider {
+      width: 100%;
+      accent-color: #ffd47a;
+      cursor: pointer;
+      height: 10px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      transform: none;
+    }
+    #time-controls #time-slider:hover {
+      background: transparent;
+      border: none;
+      transform: none;
+    }
+
+    #time-controls #time-label {
+      min-width: 138px;
+      text-align: center;
+      opacity: 0.95;
+      white-space: nowrap;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+    }
+    #time-controls #location-status {
+      grid-column: 1 / -1;
+      font-size: 11px;
+      opacity: 0.86;
+      letter-spacing: 0.02em;
+      min-height: 14px;
+      color: #ecf5ff;
+    }
+
+    #time-controls #btn-reset {
+      background: rgba(255, 198, 137, 0.2);
+      border-color: rgba(255, 225, 170, 0.42);
+    }
+    #time-controls #btn-reset:hover {
+      background: rgba(255, 212, 148, 0.3);
+    }
+
+    #time-controls #btn-prev-day,
+    #time-controls #btn-next-day {
+      min-width: 76px;
+    }
+
+    @media (max-width: 980px) {
+      #time-controls .top-row {
+        grid-template-columns: 1fr 1fr;
+      }
+      #time-controls .bottom-row {
+        grid-template-columns: auto 1fr auto;
+      }
+      #time-controls #btn-reset {
+        grid-column: 1 / -1;
+      }
+    }
+
+    #time-controls #sheet-handle {
+      display: none;
+    }
+
+    #city-overlay {
+      position: fixed;
+      top: 20%;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: #ffffff;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 140;
+      transition: opacity 0.35s ease;
+      white-space: nowrap;
+    }
+
+    #city-overlay.show {
+      opacity: 1;
+    }
+
+    @media (max-width: 600px) {
       #time-controls {
-        flex-direction: column;
-        gap: 10px;
-        padding: 14px 16px;
-        width: calc(100vw - 32px);
-        bottom: 16px;
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+        width: auto;
+        max-height: 96px;
+        padding: 10px 12px 12px;
+        gap: 9px;
         border-radius: 14px;
+        overflow: hidden;
+        transition: all 0.3s ease;
       }
-      #time-controls .btn-row {
-        display: flex;
+      #time-controls #sheet-handle {
+        display: block;
+        width: 54px;
+        height: 5px;
+        margin: 0 auto 4px;
+        border-radius: 999px;
+        background: rgba(236, 245, 255, 0.5);
+      }
+      #time-controls.collapsed .top-row {
+        grid-template-columns: 1fr auto;
         gap: 8px;
+      }
+      #time-controls.collapsed .top-row .control-group:nth-child(2),
+      #time-controls.collapsed .top-row .control-group:nth-child(3),
+      #time-controls.collapsed #location-status,
+      #time-controls.collapsed #btn-prev-day,
+      #time-controls.collapsed #btn-next-day,
+      #time-controls.collapsed #btn-reset {
+        display: none;
+      }
+      #time-controls.collapsed .bottom-row {
+        grid-template-columns: 1fr;
+      }
+      #time-controls.collapsed #time-slider {
+        margin-top: -2px;
+      }
+      #time-controls.expanded {
+        max-height: 70vh;
+        overflow-y: auto;
+      }
+      #time-controls .top-row,
+      #time-controls .bottom-row {
+        grid-template-columns: 1fr;
+      }
+      #time-controls button,
+      #time-controls input,
+      #time-controls .field-shell,
+      #time-controls .glass-trigger {
+        height: 42px;
+      }
+      #time-controls .glass-calendar {
         width: 100%;
-        justify-content: center;
       }
-      #time-controls button {
-        flex: 1;
-        font-size: 14px;
-        padding: 10px 8px;
-        min-height: 44px;
-      }
-      #time-slider {
-        width: 100%;
-        height: 6px;
-        min-height: 44px;
-      }
-      #time-label {
-        font-size: 15px;
+      #time-controls #time-label {
+        text-align: left;
         min-width: unset;
+      }
+      #time-controls #btn-prev-day,
+      #time-controls #btn-next-day,
+      #time-controls #btn-reset {
+        width: 100%;
       }
     }
   `;
   document.head.appendChild(style);
 
+  let cityOverlayEl = document.getElementById('city-overlay');
+  if (!cityOverlayEl) {
+    cityOverlayEl = document.createElement('div');
+    cityOverlayEl.id = 'city-overlay';
+    cityOverlayEl.className = 'city-overlay';
+    document.body.appendChild(cityOverlayEl);
+  }
+
   const panel = document.createElement('div');
   panel.id = 'time-controls';
   panel.innerHTML = `
-    <div class="btn-row">
+    <div id="sheet-handle" aria-hidden="true"></div>
+    <div class="top-row">
+      <label class="control-group">
+        <span class="control-label">City</span>
+        <div class="control-stack" id="city-stack">
+          <button id="city-trigger" class="glass-trigger" type="button" aria-expanded="false">
+            <span id="city-label">Use My Location</span>
+            <span class="chevron">▼</span>
+          </button>
+          <div id="city-menu" class="glass-dropdown" role="listbox"></div>
+        </div>
+      </label>
+      <label class="control-group">
+        <span class="control-label">Date</span>
+        <div class="control-stack" id="date-stack">
+          <button id="date-trigger" class="glass-trigger" type="button" aria-expanded="false">
+            <span id="date-label">Select date</span>
+            <span class="chevron">▼</span>
+          </button>
+          <div id="calendar-popover" class="glass-calendar">
+            <div class="calendar-head">
+              <button id="cal-prev" class="calendar-nav" type="button">◀</button>
+              <div id="cal-title" class="calendar-title"></div>
+              <button id="cal-next" class="calendar-nav" type="button">▶</button>
+            </div>
+            <div class="calendar-weekdays">
+              <div class="calendar-weekday">Su</div>
+              <div class="calendar-weekday">Mo</div>
+              <div class="calendar-weekday">Tu</div>
+              <div class="calendar-weekday">We</div>
+              <div class="calendar-weekday">Th</div>
+              <div class="calendar-weekday">Fr</div>
+              <div class="calendar-weekday">Sa</div>
+            </div>
+            <div id="calendar-days" class="calendar-days"></div>
+          </div>
+        </div>
+      </label>
+      <label class="control-group">
+        <span class="control-label">Time</span>
+        <div id="time-label"></div>
+      </label>
+    </div>
+    <div class="bottom-row">
       <button id="btn-prev-day">&#8722; Day</button>
-      <span id="time-label"></span>
+      <input type="range" id="time-slider" min="0" max="1439" step="1" />
       <button id="btn-next-day">&#43; Day</button>
       <button id="btn-reset">Reset</button>
     </div>
-    <input type="range" id="time-slider" min="0" max="1439" step="1" />
+    <div id="location-status"></div>
   `;
   document.body.appendChild(panel);
 
   const pad = (n) => String(n).padStart(2, '0');
 
+  const timeLabelEl = document.getElementById('time-label');
+  const dateLabelEl = document.getElementById('date-label');
+  const locationStatusEl = document.getElementById('location-status');
+  const cityStackEl = document.getElementById('city-stack');
+  const cityTriggerEl = document.getElementById('city-trigger');
+  const cityLabelEl = document.getElementById('city-label');
+  const cityMenuEl = document.getElementById('city-menu');
+  const dateStackEl = document.getElementById('date-stack');
+  const dateTriggerEl = document.getElementById('date-trigger');
+  const calTitleEl = document.getElementById('cal-title');
+  const calendarDaysEl = document.getElementById('calendar-days');
+  const calPrevEl = document.getElementById('cal-prev');
+  const calNextEl = document.getElementById('cal-next');
+  const sheetHandleEl = document.getElementById('sheet-handle');
+  const sliderEl = document.getElementById('time-slider');
+  const isMobileSheetMedia = window.matchMedia('(max-width: 600px)');
+
+  let calendarViewYear = simulationTime.getFullYear();
+  let calendarViewMonth = simulationTime.getMonth();
+  let isSheetExpanded = false;
+  let sheetTouchStartY = null;
+  let overlayTimerIn = null;
+  let overlayTimerOut = null;
+
+  function setSheetExpanded(expanded) {
+    if (!isMobileSheetMedia.matches) {
+      panel.classList.remove('collapsed', 'expanded');
+      isSheetExpanded = false;
+      return;
+    }
+
+    isSheetExpanded = expanded;
+    panel.classList.toggle('expanded', expanded);
+    panel.classList.toggle('collapsed', !expanded);
+
+    if (!expanded) {
+      closeOverlays();
+    }
+  }
+
+  function syncBottomSheetMode() {
+    if (isMobileSheetMedia.matches) {
+      setSheetExpanded(false);
+    } else {
+      panel.classList.remove('collapsed', 'expanded');
+      isSheetExpanded = false;
+    }
+  }
+
+  function applyAdaptiveOverlayPosition(stackEl, overlayEl) {
+    if (!overlayEl) return;
+
+    const margin = 12;
+    const stackRect = stackEl.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const cs = window.getComputedStyle(overlayEl);
+    const maxHeight = parseFloat(cs.maxHeight);
+    const contentHeight = overlayEl.scrollHeight;
+    const overlayHeight = Number.isFinite(maxHeight) ? Math.min(contentHeight, maxHeight) : contentHeight;
+
+    const spaceBelow = viewportHeight - stackRect.bottom - margin;
+    const spaceAbove = stackRect.top - margin;
+    const openUp = spaceBelow < overlayHeight && spaceAbove > spaceBelow;
+    stackEl.classList.toggle('open-up', openUp);
+  }
+
+  function renderCityOptions() {
+    const options = [`<button class="glass-option" type="button" data-city="auto">Use My Location</button>`];
+    CITY_DATASET.forEach((city) => {
+      options.push(`<button class="glass-option" type="button" data-city="${city.name}">${city.name}</button>`);
+    });
+    cityMenuEl.innerHTML = options.join('');
+  }
+
+  function setStackOpen(stackEl, triggerEl, overlayEl, isOpen) {
+    stackEl.classList.toggle('open', isOpen);
+    if (!isOpen) {
+      stackEl.classList.remove('open-up');
+    } else {
+      requestAnimationFrame(() => applyAdaptiveOverlayPosition(stackEl, overlayEl));
+    }
+    triggerEl.setAttribute('aria-expanded', String(isOpen));
+  }
+
+  function closeOverlays() {
+    setStackOpen(cityStackEl, cityTriggerEl, cityMenuEl, false);
+    setStackOpen(dateStackEl, dateTriggerEl, document.getElementById('calendar-popover'), false);
+  }
+
+  function toPrettyDate(date) {
+    return date.toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  }
+
+  function renderCalendar() {
+    const monthLabel = new Date(calendarViewYear, calendarViewMonth, 1).toLocaleDateString(undefined, {
+      month: 'long',
+      year: 'numeric'
+    });
+    calTitleEl.textContent = monthLabel;
+
+    const firstDay = new Date(calendarViewYear, calendarViewMonth, 1);
+    const daysInMonth = new Date(calendarViewYear, calendarViewMonth + 1, 0).getDate();
+    const startWeekday = firstDay.getDay();
+    const prevMonthDays = new Date(calendarViewYear, calendarViewMonth, 0).getDate();
+
+    calendarDaysEl.innerHTML = '';
+
+    const cells = [];
+    for (let i = 0; i < startWeekday; i++) {
+      cells.push({ day: prevMonthDays - startWeekday + i + 1, offset: -1 });
+    }
+    for (let i = 1; i <= daysInMonth; i++) {
+      cells.push({ day: i, offset: 0 });
+    }
+    while (cells.length % 7 !== 0 || cells.length < 35) {
+      cells.push({ day: cells.length - (startWeekday + daysInMonth) + 1, offset: 1 });
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    cells.forEach((cell) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'calendar-day';
+      if (cell.offset !== 0) button.classList.add('muted');
+
+      const date = new Date(calendarViewYear, calendarViewMonth + cell.offset, cell.day);
+      date.setHours(0, 0, 0, 0);
+
+      const selected = new Date(simulationTime);
+      selected.setHours(0, 0, 0, 0);
+      if (date.getTime() === selected.getTime()) button.classList.add('selected');
+      if (date.getTime() === today.getTime()) button.classList.add('today');
+
+      button.textContent = String(cell.day);
+      button.addEventListener('click', () => {
+        simulationTime.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+        calendarViewYear = simulationTime.getFullYear();
+        calendarViewMonth = simulationTime.getMonth();
+        updateLabel();
+        refreshSun();
+        renderCalendar();
+        setStackOpen(dateStackEl, dateTriggerEl, document.getElementById('calendar-popover'), false);
+      });
+      calendarDaysEl.appendChild(button);
+    });
+
+    if (dateStackEl.classList.contains('open')) {
+      applyAdaptiveOverlayPosition(dateStackEl, document.getElementById('calendar-popover'));
+    }
+  }
+
   function updateLabel() {
     const h = simulationTime.getHours();
     const m = simulationTime.getMinutes();
     const d = simulationTime.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    document.getElementById('time-label').textContent = `${d}  ${pad(h)}:${pad(m)}`;
+    timeLabelEl.textContent = `${d}  ${pad(h)}:${pad(m)}`;
     document.getElementById('time-slider').value = h * 60 + m;
+    dateLabelEl.textContent = toPrettyDate(simulationTime);
+  }
+
+  function markCityOption(value) {
+    cityMenuEl.querySelectorAll('.glass-option').forEach((el) => {
+      const selected = el.dataset.city === value;
+      el.classList.toggle('is-selected', selected);
+      el.setAttribute('aria-selected', String(selected));
+    });
+  }
+
+  function updateLocationStatus() {
+    let status = '';
+    if (locationMode === 'manual-city' && activeCityName) {
+      status = `Manual city: ${activeCityName} (${currentLat.toFixed(2)}, ${currentLon.toFixed(2)})`;
+      cityLabelEl.textContent = activeCityName;
+      markCityOption(activeCityName);
+    } else if (locationMode === 'geolocation' && geolocationGranted) {
+      status = `Using geolocation (${currentLat.toFixed(2)}, ${currentLon.toFixed(2)})`;
+      cityLabelEl.textContent = 'Use My Location';
+      markCityOption('auto');
+    } else {
+      status = `Using fallback: ${FALLBACK_LOCATION.name} (${currentLat.toFixed(2)}, ${currentLon.toFixed(2)})`;
+      cityLabelEl.textContent = 'Use My Location';
+      markCityOption('auto');
+    }
+    locationStatusEl.textContent = status;
+  }
+
+  function showCityOverlay(text) {
+    if (!cityOverlayEl) return;
+
+    cityOverlayEl.textContent = text;
+    cityOverlayEl.classList.remove('show');
+    if (overlayTimerIn) clearTimeout(overlayTimerIn);
+    if (overlayTimerOut) clearTimeout(overlayTimerOut);
+
+    overlayTimerIn = setTimeout(() => {
+      cityOverlayEl.classList.add('show');
+    }, 10);
+
+    // ~2 s total: fade in quickly, hold briefly, then fade out.
+    overlayTimerOut = setTimeout(() => {
+      cityOverlayEl.classList.remove('show');
+    }, 1650);
+  }
+
+  function stopPanelTogglePropagation(el, events = ['click']) {
+    if (!el) return;
+    events.forEach((evt) => {
+      el.addEventListener(evt, (e) => e.stopPropagation(), { passive: true });
+    });
   }
 
   document.getElementById('time-slider').addEventListener('input', (e) => {
@@ -829,6 +1567,134 @@ function buildTimeUI() {
     updateLabel();
     refreshSun();
   });
+
+  cityTriggerEl.addEventListener('click', () => {
+    if (isMobileSheetMedia.matches && !isSheetExpanded) {
+      setSheetExpanded(true);
+      return;
+    }
+
+    const opening = !cityStackEl.classList.contains('open');
+    setStackOpen(dateStackEl, dateTriggerEl, document.getElementById('calendar-popover'), false);
+    setStackOpen(cityStackEl, cityTriggerEl, cityMenuEl, opening);
+  });
+
+  dateTriggerEl.addEventListener('click', () => {
+    if (isMobileSheetMedia.matches && !isSheetExpanded) {
+      setSheetExpanded(true);
+      return;
+    }
+
+    const opening = !dateStackEl.classList.contains('open');
+    calendarViewYear = simulationTime.getFullYear();
+    calendarViewMonth = simulationTime.getMonth();
+    renderCalendar();
+    setStackOpen(cityStackEl, cityTriggerEl, cityMenuEl, false);
+    setStackOpen(dateStackEl, dateTriggerEl, document.getElementById('calendar-popover'), opening);
+  });
+
+  calPrevEl.addEventListener('click', () => {
+    calendarViewMonth -= 1;
+    if (calendarViewMonth < 0) {
+      calendarViewMonth = 11;
+      calendarViewYear -= 1;
+    }
+    renderCalendar();
+  });
+
+  calNextEl.addEventListener('click', () => {
+    calendarViewMonth += 1;
+    if (calendarViewMonth > 11) {
+      calendarViewMonth = 0;
+      calendarViewYear += 1;
+    }
+    renderCalendar();
+  });
+
+  cityMenuEl.addEventListener('click', (e) => {
+    const option = e.target.closest('[data-city]');
+    if (!option) return;
+    const value = option.dataset.city;
+
+    if (value === 'auto') {
+      if (geolocationGranted && geoLat !== null && geoLon !== null) {
+        setLocationSource('geolocation', geoLat, geoLon, { smooth: true, cityName: null });
+      } else {
+        setLocationSource('fallback', FALLBACK_LOCATION.lat, FALLBACK_LOCATION.lon, {
+          smooth: true,
+          cityName: FALLBACK_LOCATION.name
+        });
+      }
+      showCityOverlay('Your Location');
+      setStackOpen(cityStackEl, cityTriggerEl, cityMenuEl, false);
+      return;
+    }
+
+    const city = CITY_LOCATIONS[value];
+    if (!city) return;
+    setLocationSource('manual-city', city.lat, city.lon, { smooth: true, cityName: value });
+    const cityMeta = CITY_DATASET.find((entry) => entry.name === value);
+    if (cityMeta) {
+      showCityOverlay(`${cityMeta.name}, ${cityMeta.country}`);
+    }
+    setStackOpen(cityStackEl, cityTriggerEl, cityMenuEl, false);
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!panel.contains(e.target)) {
+      closeOverlays();
+      if (isMobileSheetMedia.matches && isSheetExpanded) {
+        setSheetExpanded(false);
+      }
+      return;
+    }
+
+    if (!cityStackEl.contains(e.target) && cityStackEl.classList.contains('open')) {
+      setStackOpen(cityStackEl, cityTriggerEl, cityMenuEl, false);
+    }
+    if (!dateStackEl.contains(e.target) && dateStackEl.classList.contains('open')) {
+      setStackOpen(dateStackEl, dateTriggerEl, document.getElementById('calendar-popover'), false);
+    }
+  });
+
+  // Keep panel expansion intentional: only the sheet handle toggles in mobile mode.
+  sheetHandleEl.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!isMobileSheetMedia.matches) return;
+    setSheetExpanded(!isSheetExpanded);
+  });
+
+  // Prevent child control interactions from bubbling into any parent toggle logic.
+  stopPanelTogglePropagation(sliderEl, ['click', 'touchstart', 'mousedown', 'pointerdown']);
+  panel.querySelectorAll('button, input, .glass-trigger, .glass-option, .calendar-day, .calendar-nav').forEach((el) => {
+    stopPanelTogglePropagation(el, ['click', 'touchstart', 'mousedown', 'pointerdown']);
+  });
+
+  panel.addEventListener('touchstart', (e) => {
+    if (!isMobileSheetMedia.matches || !isSheetExpanded) return;
+    sheetTouchStartY = e.touches[0].clientY;
+  }, { passive: true });
+
+  panel.addEventListener('touchend', (e) => {
+    if (!isMobileSheetMedia.matches || !isSheetExpanded || sheetTouchStartY === null) return;
+    const endY = e.changedTouches[0].clientY;
+    const deltaY = endY - sheetTouchStartY;
+    sheetTouchStartY = null;
+    if (deltaY > 55) {
+      setSheetExpanded(false);
+    }
+  }, { passive: true });
+
+  window.addEventListener('resize', () => {
+    syncBottomSheetMode();
+    if (cityStackEl.classList.contains('open')) {
+      applyAdaptiveOverlayPosition(cityStackEl, cityMenuEl);
+    }
+    if (dateStackEl.classList.contains('open')) {
+      applyAdaptiveOverlayPosition(dateStackEl, document.getElementById('calendar-popover'));
+    }
+  });
+
   document.getElementById('btn-prev-day').addEventListener('click', () => {
     simulationTime.setDate(simulationTime.getDate() - 1);
     updateLabel();
@@ -841,11 +1707,31 @@ function buildTimeUI() {
   });
   document.getElementById('btn-reset').addEventListener('click', () => {
     simulationTime = new Date();
+
+    if (geolocationGranted && geoLat !== null && geoLon !== null) {
+      setLocationSource('geolocation', geoLat, geoLon, { smooth: true, cityName: null });
+    } else {
+      setLocationSource('fallback', FALLBACK_LOCATION.lat, FALLBACK_LOCATION.lon, {
+        smooth: true,
+        cityName: FALLBACK_LOCATION.name
+      });
+    }
+
+    showCityOverlay('Your Location');
+
     updateLabel();
-    refreshSun();
+    updateLocationStatus();
   });
 
+  renderCityOptions();
+  syncBottomSheetMode();
   updateLabel();
+  renderCalendar();
+  updateLocationStatus();
+
+  controlsApi = {
+    updateLocationStatus
+  };
 
   // Advance simulation time by 1 minute every 60 s when the user is not interacting
   setInterval(() => {
@@ -866,6 +1752,23 @@ function animate() {
   // Keep sky/star domes centred on camera so they always surround the viewer
   latitudeGroup.position.copy(camera.position);
   skyDome.position.copy(camera.position);
+
+  if (locationTransition.active) {
+    const elapsed = performance.now() - locationTransition.startMs;
+    const t = THREE.MathUtils.clamp(elapsed / locationTransition.durationMs, 0, 1);
+    const eased = smoothstep01(t);
+    currentLat = THREE.MathUtils.lerp(locationTransition.fromLat, locationTransition.toLat, eased);
+    currentLon = THREE.MathUtils.lerp(locationTransition.fromLon, locationTransition.toLon, eased);
+    refreshSun();
+
+    if (t >= 1) {
+      locationTransition.active = false;
+      currentLat = locationTransition.toLat;
+      currentLon = locationTransition.toLon;
+      notifyControlsLocation();
+    }
+  }
+
   // Drive per-vertex twinkling and cloud drift each frame
   const now = performance.now() * 0.001;
   starMaterial.uniforms.time.value = now;
