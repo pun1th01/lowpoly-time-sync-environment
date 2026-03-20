@@ -998,22 +998,29 @@ function buildTimeUI() {
       transition: all 0.2s ease;
     }
 
-    #time-controls .control-stack.open .glass-dropdown,
-    #time-controls .control-stack.open .glass-calendar {
+    #time-controls .control-stack.open > .glass-dropdown,
+    #time-controls .control-stack.open > .glass-calendar {
       opacity: 1;
       transform: translateY(0) scale(1);
       pointer-events: auto;
     }
 
-    #time-controls .control-stack.open-up .glass-dropdown,
-    #time-controls .control-stack.open-up .glass-calendar {
+    #time-controls .glass-dropdown.open,
+    #time-controls .glass-calendar.open {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+    }
+
+    #time-controls .control-stack.open-up > .glass-dropdown,
+    #time-controls .control-stack.open-up > .glass-calendar {
       top: auto;
       bottom: calc(100% + 8px);
       transform: translateY(-10px) scale(0.95);
     }
 
-    #time-controls .control-stack.open.open-up .glass-dropdown,
-    #time-controls .control-stack.open.open-up .glass-calendar {
+    #time-controls .control-stack.open.open-up > .glass-dropdown,
+    #time-controls .control-stack.open.open-up > .glass-calendar {
       transform: translateY(0) scale(1);
     }
 
@@ -1110,12 +1117,7 @@ function buildTimeUI() {
       color: rgba(200, 215, 232, 0.45);
     }
 
-    #time-controls .calendar-day.today {
-      border-color: rgba(179, 220, 255, 0.65);
-      background: rgba(114, 178, 236, 0.22);
-    }
-
-    #time-controls .calendar-day.selected {
+    #time-controls .calendar-day.selected-day {
       background: rgba(143, 204, 255, 0.4);
       border-color: rgba(208, 236, 255, 0.8);
       color: #ffffff;
@@ -1332,7 +1334,23 @@ function buildTimeUI() {
           <div id="calendar-popover" class="glass-calendar">
             <div class="calendar-head">
               <button id="cal-prev" class="calendar-nav" type="button">◀</button>
-              <div id="cal-title" class="calendar-title"></div>
+              <div style="display:flex; gap:8px;">
+                <div class="control-stack" id="month-stack">
+                  <button id="month-trigger" class="glass-trigger" type="button">
+                    <span id="month-label"></span>
+                    <span class="chevron">▼</span>
+                  </button>
+                  <div id="month-menu" class="glass-dropdown"></div>
+                </div>
+
+                <div class="control-stack" id="year-stack">
+                  <button id="year-trigger" class="glass-trigger" type="button">
+                    <span id="year-label"></span>
+                    <span class="chevron">▼</span>
+                  </button>
+                  <div id="year-menu" class="glass-dropdown"></div>
+                </div>
+              </div>
               <button id="cal-next" class="calendar-nav" type="button">▶</button>
             </div>
             <div class="calendar-weekdays">
@@ -1378,13 +1396,31 @@ function buildTimeUI() {
   const cityMenuEl = document.getElementById('city-menu');
   const dateStackEl = document.getElementById('date-stack');
   const dateTriggerEl = document.getElementById('date-trigger');
-  const calTitleEl = document.getElementById('cal-title');
   const calendarDaysEl = document.getElementById('calendar-days');
   const calPrevEl = document.getElementById('cal-prev');
   const calNextEl = document.getElementById('cal-next');
+  const monthStackEl = document.getElementById('month-stack');
+  const monthTriggerEl = document.getElementById('month-trigger');
+  const monthLabelEl = document.getElementById('month-label');
+  const monthMenuEl = document.getElementById('month-menu');
+  const yearStackEl = document.getElementById('year-stack');
+  const yearTriggerEl = document.getElementById('year-trigger');
+  const yearLabelEl = document.getElementById('year-label');
+  const yearMenuEl = document.getElementById('year-menu');
   const sheetHandleEl = document.getElementById('sheet-handle');
   const sliderEl = document.getElementById('time-slider');
   const isMobileSheetMedia = window.matchMedia('(max-width: 600px)');
+
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  monthMenuEl.innerHTML = monthNames.map((m, i) =>
+    `<button class="glass-option" type="button" data-month="${i}">${m}</button>`
+  ).join('');
+
+  const years = [];
+  for (let y = 2000; y <= 2035; y++) {
+    years.push(`<button class="glass-option" type="button" data-year="${y}">${y}</button>`);
+  }
+  yearMenuEl.innerHTML = years.join('');
 
   let calendarViewYear = simulationTime.getFullYear();
   let calendarViewMonth = simulationTime.getMonth();
@@ -1392,6 +1428,11 @@ function buildTimeUI() {
   let sheetTouchStartY = null;
   let overlayTimerIn = null;
   let overlayTimerOut = null;
+  let isMonthOpen = false;
+  let isYearOpen = false;
+
+  monthMenuEl.classList.remove('open');
+  yearMenuEl.classList.remove('open');
 
   function setSheetExpanded(expanded) {
     if (!isMobileSheetMedia.matches) {
@@ -1445,17 +1486,23 @@ function buildTimeUI() {
 
   function setStackOpen(stackEl, triggerEl, overlayEl, isOpen) {
     stackEl.classList.toggle('open', isOpen);
+    if (overlayEl) overlayEl.classList.toggle('open', isOpen);
     if (!isOpen) {
       stackEl.classList.remove('open-up');
     } else {
       requestAnimationFrame(() => applyAdaptiveOverlayPosition(stackEl, overlayEl));
     }
     triggerEl.setAttribute('aria-expanded', String(isOpen));
+
+    if (stackEl === monthStackEl) isMonthOpen = isOpen;
+    if (stackEl === yearStackEl) isYearOpen = isOpen;
   }
 
   function closeOverlays() {
     setStackOpen(cityStackEl, cityTriggerEl, cityMenuEl, false);
     setStackOpen(dateStackEl, dateTriggerEl, document.getElementById('calendar-popover'), false);
+    setStackOpen(monthStackEl, monthTriggerEl, monthMenuEl, false);
+    setStackOpen(yearStackEl, yearTriggerEl, yearMenuEl, false);
   }
 
   function toPrettyDate(date) {
@@ -1467,12 +1514,24 @@ function buildTimeUI() {
     });
   }
 
+  function toOverlayDateDDMMYYYY(date) {
+    const dd = String(date.getDate()).padStart(2, '0');
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const yyyy = date.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
   function renderCalendar() {
-    const monthLabel = new Date(calendarViewYear, calendarViewMonth, 1).toLocaleDateString(undefined, {
-      month: 'long',
-      year: 'numeric'
+    monthLabelEl.textContent = monthNames[calendarViewMonth];
+    yearLabelEl.textContent = String(calendarViewYear);
+    monthMenuEl.querySelectorAll('.glass-option').forEach((el) => {
+      const selected = Number.parseInt(el.dataset.month, 10) === calendarViewMonth;
+      el.classList.toggle('is-selected', selected);
     });
-    calTitleEl.textContent = monthLabel;
+    yearMenuEl.querySelectorAll('.glass-option').forEach((el) => {
+      const selected = Number.parseInt(el.dataset.year, 10) === calendarViewYear;
+      el.classList.toggle('is-selected', selected);
+    });
 
     const firstDay = new Date(calendarViewYear, calendarViewMonth, 1);
     const daysInMonth = new Date(calendarViewYear, calendarViewMonth + 1, 0).getDate();
@@ -1492,9 +1551,6 @@ function buildTimeUI() {
       cells.push({ day: cells.length - (startWeekday + daysInMonth) + 1, offset: 1 });
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
     cells.forEach((cell) => {
       const button = document.createElement('button');
       button.type = 'button';
@@ -1506,8 +1562,11 @@ function buildTimeUI() {
 
       const selected = new Date(simulationTime);
       selected.setHours(0, 0, 0, 0);
-      if (date.getTime() === selected.getTime()) button.classList.add('selected');
-      if (date.getTime() === today.getTime()) button.classList.add('today');
+      if (date.getTime() === selected.getTime()) {
+        button.classList.add('selected-day');
+      } else {
+        button.classList.remove('selected-day');
+      }
 
       button.textContent = String(cell.day);
       button.addEventListener('click', () => {
@@ -1516,6 +1575,7 @@ function buildTimeUI() {
         calendarViewMonth = simulationTime.getMonth();
         updateLabel();
         refreshSun();
+        showCityOverlay(toOverlayDateDDMMYYYY(simulationTime));
         renderCalendar();
         setStackOpen(dateStackEl, dateTriggerEl, document.getElementById('calendar-popover'), false);
       });
@@ -1631,6 +1691,8 @@ function buildTimeUI() {
     calendarViewYear = simulationTime.getFullYear();
     calendarViewMonth = simulationTime.getMonth();
     renderCalendar();
+    setStackOpen(monthStackEl, monthTriggerEl, monthMenuEl, false);
+    setStackOpen(yearStackEl, yearTriggerEl, yearMenuEl, false);
     setStackOpen(cityStackEl, cityTriggerEl, cityMenuEl, false);
     setStackOpen(dateStackEl, dateTriggerEl, document.getElementById('calendar-popover'), opening);
   });
@@ -1651,6 +1713,40 @@ function buildTimeUI() {
       calendarViewYear += 1;
     }
     renderCalendar();
+  });
+
+  monthTriggerEl.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const opening = !isMonthOpen;
+    setStackOpen(yearStackEl, yearTriggerEl, yearMenuEl, false);
+    setStackOpen(monthStackEl, monthTriggerEl, monthMenuEl, opening);
+  });
+
+  yearTriggerEl.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const opening = !isYearOpen;
+    setStackOpen(monthStackEl, monthTriggerEl, monthMenuEl, false);
+    setStackOpen(yearStackEl, yearTriggerEl, yearMenuEl, opening);
+  });
+
+  monthMenuEl.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const btn = e.target.closest('[data-month]');
+    if (!btn) return;
+
+    calendarViewMonth = Number.parseInt(btn.dataset.month, 10);
+    renderCalendar();
+    setStackOpen(monthStackEl, monthTriggerEl, monthMenuEl, false);
+  });
+
+  yearMenuEl.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const btn = e.target.closest('[data-year]');
+    if (!btn) return;
+
+    calendarViewYear = Number.parseInt(btn.dataset.year, 10);
+    renderCalendar();
+    setStackOpen(yearStackEl, yearTriggerEl, yearMenuEl, false);
   });
 
   cityMenuEl.addEventListener('click', (e) => {
@@ -1701,6 +1797,12 @@ function buildTimeUI() {
     if (!dateStackEl.contains(e.target) && dateStackEl.classList.contains('open')) {
       setStackOpen(dateStackEl, dateTriggerEl, document.getElementById('calendar-popover'), false);
     }
+    if (!monthStackEl.contains(e.target) && monthStackEl.classList.contains('open')) {
+      setStackOpen(monthStackEl, monthTriggerEl, monthMenuEl, false);
+    }
+    if (!yearStackEl.contains(e.target) && yearStackEl.classList.contains('open')) {
+      setStackOpen(yearStackEl, yearTriggerEl, yearMenuEl, false);
+    }
   });
 
   // Keep panel expansion intentional: only the sheet handle toggles in mobile mode.
@@ -1712,7 +1814,7 @@ function buildTimeUI() {
 
   // Prevent child control interactions from bubbling into any parent toggle logic.
   stopPanelTogglePropagation(sliderEl, ['click', 'touchstart', 'mousedown', 'pointerdown']);
-  panel.querySelectorAll('button, input, .glass-trigger, .glass-option, .calendar-day, .calendar-nav').forEach((el) => {
+  panel.querySelectorAll('input, .glass-trigger, .calendar-day, .calendar-nav, #btn-prev-day, #btn-next-day, #btn-reset').forEach((el) => {
     stopPanelTogglePropagation(el, ['click', 'touchstart', 'mousedown', 'pointerdown']);
   });
 
@@ -1745,13 +1847,16 @@ function buildTimeUI() {
     simulationTime.setDate(simulationTime.getDate() - 1);
     updateLabel();
     refreshSun();
+    showCityOverlay(toOverlayDateDDMMYYYY(simulationTime));
   });
   document.getElementById('btn-next-day').addEventListener('click', () => {
     simulationTime.setDate(simulationTime.getDate() + 1);
     updateLabel();
     refreshSun();
+    showCityOverlay(toOverlayDateDDMMYYYY(simulationTime));
   });
   document.getElementById('btn-reset').addEventListener('click', () => {
+    const previousMode = locationMode;
     simulationTime = new Date();
     currentTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -1764,7 +1869,9 @@ function buildTimeUI() {
       });
     }
 
-    showCityOverlay('Your Location');
+    if (previousMode !== 'geolocation') {
+      showCityOverlay('Your Location');
+    }
 
     updateLabel();
     updateLocationStatus();

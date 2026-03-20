@@ -83,6 +83,12 @@ Use the time slider at the bottom to scrub through any hour of the day, or step 
 - 🌐 Accurate timezone handling per selected city
 - 🔄 Real-time timezone switching when changing cities
 - 📍 Fallback location overlay when geolocation is denied
+- 📅 Glass-style month/year dropdowns in custom calendar (native selects removed)
+- ✅ Calendar dropdown selection now reliably updates month/year labels and grid
+- ✅ Selected-date-only highlight in calendar (dual highlight issue resolved)
+- 🧭 Calendar dropdowns stay closed until explicitly opened by user
+- 🧊 Improved dropdown layering/click behavior for more reliable interactions
+- 🌍 Improved location reset/feedback flow between manual city and geolocation
 
 | Feature | Description |
 |---|---|
@@ -122,6 +128,11 @@ Use the time slider at the bottom to scrub through any hour of the day, or step 
 - Dual time display layout (left: user time, right: city time)
 - Improved time readability and layout balance
 - Clear feedback when fallback location is used
+- Glass-style calendar month/year selectors for visual consistency across controls
+- Calendar interaction reliability fixes for month/year selection and dropdown close behavior
+- Selected date highlight behavior refined to avoid conflicting active-day states
+- More predictable dropdown visibility and layering across desktop/mobile interactions
+- Improved reset/location feedback to avoid incorrect "Your Location" state messaging
 
 ---
 
