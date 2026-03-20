@@ -73,10 +73,12 @@ Use the time slider at the bottom to scrub through any hour of the day, or step 
 - 🌍 Real-time sun and moon positioning using SunCalc
 - 🕒 Time-synced sky based on user location
 - 🏙️ City selection with global coverage
+- ✅ Region selector
 - 📱 Mobile-friendly bottom-sheet UI
 - 🧊 Glassmorphism control panel
 - 📅 Custom calendar UI (no native date input)
 - 🎚️ Interactive time slider
+- ✅ Date change UI
 - 🔄 Reset to real location
 - 🏷️ Animated city/location overlay (fade in/out)
 - 🕒 Dual time display (user time + selected city time)
