@@ -39,23 +39,23 @@ document.body.appendChild(renderer.domElement);
 let simulationTime = new Date();
 const FALLBACK_LOCATION = { name: 'Bangalore', lat: 12.9716, lon: 77.5946 };
 const CITY_DATASET = [
-  { name: 'Bangalore', country: 'India', lat: 12.9716, lon: 77.5946 },
-  { name: 'Mumbai', country: 'India', lat: 19.0760, lon: 72.8777 },
-  { name: 'Delhi', country: 'India', lat: 28.6139, lon: 77.2090 },
-  { name: 'New York', country: 'USA', lat: 40.7128, lon: -74.0060 },
-  { name: 'Los Angeles', country: 'USA', lat: 34.0522, lon: -118.2437 },
-  { name: 'Chicago', country: 'USA', lat: 41.8781, lon: -87.6298 },
-  { name: 'London', country: 'UK', lat: 51.5074, lon: -0.1278 },
-  { name: 'Paris', country: 'France', lat: 48.8566, lon: 2.3522 },
-  { name: 'Berlin', country: 'Germany', lat: 52.5200, lon: 13.4050 },
-  { name: 'Tokyo', country: 'Japan', lat: 35.6762, lon: 139.6503 },
-  { name: 'Singapore', country: 'Singapore', lat: 1.3521, lon: 103.8198 },
-  { name: 'Dubai', country: 'UAE', lat: 25.2048, lon: 55.2708 },
-  { name: 'Sydney', country: 'Australia', lat: -33.8688, lon: 151.2093 },
-  { name: 'Cape Town', country: 'South Africa', lat: -33.9249, lon: 18.4241 },
-  { name: 'Cairo', country: 'Egypt', lat: 30.0444, lon: 31.2357 },
-  { name: 'São Paulo', country: 'Brazil', lat: -23.5505, lon: -46.6333 },
-  { name: 'Buenos Aires', country: 'Argentina', lat: -34.6037, lon: -58.3816 }
+  { name: 'Bangalore', country: 'India', lat: 12.9716, lon: 77.5946, tz: 'Asia/Kolkata' },
+  { name: 'Mumbai', country: 'India', lat: 19.0760, lon: 72.8777, tz: 'Asia/Kolkata' },
+  { name: 'Delhi', country: 'India', lat: 28.6139, lon: 77.2090, tz: 'Asia/Kolkata' },
+  { name: 'New York', country: 'USA', lat: 40.7128, lon: -74.0060, tz: 'America/New_York' },
+  { name: 'Los Angeles', country: 'USA', lat: 34.0522, lon: -118.2437, tz: 'America/Los_Angeles' },
+  { name: 'Chicago', country: 'USA', lat: 41.8781, lon: -87.6298, tz: 'America/Chicago' },
+  { name: 'London', country: 'UK', lat: 51.5074, lon: -0.1278, tz: 'Europe/London' },
+  { name: 'Paris', country: 'France', lat: 48.8566, lon: 2.3522, tz: 'Europe/Paris' },
+  { name: 'Berlin', country: 'Germany', lat: 52.5200, lon: 13.4050, tz: 'Europe/Berlin' },
+  { name: 'Tokyo', country: 'Japan', lat: 35.6762, lon: 139.6503, tz: 'Asia/Tokyo' },
+  { name: 'Singapore', country: 'Singapore', lat: 1.3521, lon: 103.8198, tz: 'Asia/Singapore' },
+  { name: 'Dubai', country: 'UAE', lat: 25.2048, lon: 55.2708, tz: 'Asia/Dubai' },
+  { name: 'Sydney', country: 'Australia', lat: -33.8688, lon: 151.2093, tz: 'Australia/Sydney' },
+  { name: 'Cape Town', country: 'South Africa', lat: -33.9249, lon: 18.4241, tz: 'Africa/Johannesburg' },
+  { name: 'Cairo', country: 'Egypt', lat: 30.0444, lon: 31.2357, tz: 'Africa/Cairo' },
+  { name: 'São Paulo', country: 'Brazil', lat: -23.5505, lon: -46.6333, tz: 'America/Sao_Paulo' },
+  { name: 'Buenos Aires', country: 'Argentina', lat: -34.6037, lon: -58.3816, tz: 'America/Argentina/Buenos_Aires' }
 ];
 const CITY_LOCATIONS = Object.fromEntries(
   CITY_DATASET.map((city) => [city.name, { lat: city.lat, lon: city.lon }])
@@ -63,6 +63,7 @@ const CITY_LOCATIONS = Object.fromEntries(
 
 let currentLat = FALLBACK_LOCATION.lat;
 let currentLon = FALLBACK_LOCATION.lon;
+let currentTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 let geoLat = null;
 let geoLon = null;
 let geolocationGranted = false;
@@ -70,6 +71,7 @@ let locationMode = 'fallback'; // 'manual-city' | 'geolocation' | 'fallback'
 let activeCityName = null;
 let cloudSimOffset = 0; // hours-based offset so the slider visibly shifts cloud position
 let controlsApi = null;
+let pendingOverlayMessage = null;
 
 const locationTransition = {
   active: false,
@@ -84,6 +86,14 @@ const locationTransition = {
 function notifyControlsLocation() {
   if (controlsApi && typeof controlsApi.updateLocationStatus === 'function') {
     controlsApi.updateLocationStatus();
+  }
+}
+
+function notifyControlsOverlay(text) {
+  if (controlsApi && typeof controlsApi.showOverlay === 'function') {
+    controlsApi.showOverlay(text);
+  } else {
+    pendingOverlayMessage = text;
   }
 }
 
@@ -789,6 +799,7 @@ function initGeolocation() {
       geoLat = pos.coords.latitude;
       geoLon = pos.coords.longitude;
       geolocationGranted = true;
+      currentTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       console.log('Geolocation acquired — Lat:', geoLat, 'Lon:', geoLon);
 
       if (locationMode !== 'manual-city') {
@@ -798,16 +809,18 @@ function initGeolocation() {
       }
     },
     (err) => {
-      console.warn('Geolocation denied, using fallback (Bangalore):', err.message);
+      console.warn('Geolocation denied:', err.message);
       geolocationGranted = false;
       geoLat = null;
       geoLon = null;
+      currentTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
       if (locationMode !== 'manual-city') {
         setLocationSource('fallback', FALLBACK_LOCATION.lat, FALLBACK_LOCATION.lon, {
-          smooth: false,
+          smooth: true,
           cityName: FALLBACK_LOCATION.name
         });
+        notifyControlsOverlay(`Using Default Location: ${FALLBACK_LOCATION.name}`);
       } else {
         notifyControlsLocation();
       }
@@ -1129,16 +1142,28 @@ function buildTimeUI() {
       transform: none;
     }
 
-    #time-controls #time-label {
-      min-width: 138px;
-      text-align: center;
-      opacity: 0.95;
-      white-space: nowrap;
+    #time-controls #time-container {
+      min-width: 160px;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 0 10px;
+      box-sizing: border-box;
+    }
+    #time-controls #user-time {
+      text-align: left;
       font-weight: 700;
       letter-spacing: 0.02em;
-      display: flex;
-      align-items: center;
-      padding: 0 10px;
+      white-space: nowrap;
+    }
+    #time-controls #city-time {
+      text-align: right;
+      font-size: 12px;
+      opacity: 0.85;
+      font-weight: 600;
+      white-space: nowrap;
     }
     #time-controls #location-status {
       grid-column: 1 / -1;
@@ -1261,9 +1286,9 @@ function buildTimeUI() {
       #time-controls .glass-calendar {
         width: 100%;
       }
-      #time-controls #time-label {
-        text-align: left;
+      #time-controls #time-container {
         min-width: unset;
+        padding: 0;
       }
       #time-controls #btn-prev-day,
       #time-controls #btn-next-day,
@@ -1325,7 +1350,10 @@ function buildTimeUI() {
       </label>
       <label class="control-group">
         <span class="control-label">Time</span>
-        <div id="time-label"></div>
+        <div id="time-container">
+          <div id="user-time"></div>
+          <div id="city-time"></div>
+        </div>
       </label>
     </div>
     <div class="bottom-row">
@@ -1340,7 +1368,8 @@ function buildTimeUI() {
 
   const pad = (n) => String(n).padStart(2, '0');
 
-  const timeLabelEl = document.getElementById('time-label');
+  const userTimeEl = document.getElementById('user-time');
+  const cityTimeEl = document.getElementById('city-time');
   const dateLabelEl = document.getElementById('date-label');
   const locationStatusEl = document.getElementById('location-status');
   const cityStackEl = document.getElementById('city-stack');
@@ -1431,6 +1460,7 @@ function buildTimeUI() {
 
   function toPrettyDate(date) {
     return date.toLocaleDateString(undefined, {
+      timeZone: currentTimezone,
       year: 'numeric',
       month: 'short',
       day: 'numeric'
@@ -1501,8 +1531,20 @@ function buildTimeUI() {
     const h = simulationTime.getHours();
     const m = simulationTime.getMinutes();
     const d = simulationTime.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    timeLabelEl.textContent = `${d}  ${pad(h)}:${pad(m)}`;
+    userTimeEl.textContent = `${d}  ${pad(h)}:${pad(m)}`;
+
+    const cityDate = new Date(
+      simulationTime.toLocaleString('en-US', { timeZone: currentTimezone })
+    );
+    const ch = pad(cityDate.getHours());
+    const cm = pad(cityDate.getMinutes());
+    cityTimeEl.textContent = activeCityName
+      ? `${activeCityName}: ${ch}:${cm}`
+      : `Local: ${ch}:${cm}`;
+
+    // Keep slider mapped to system/local time because it controls global simulationTime.
     document.getElementById('time-slider').value = h * 60 + m;
+
     dateLabelEl.textContent = toPrettyDate(simulationTime);
   }
 
@@ -1617,6 +1659,7 @@ function buildTimeUI() {
     const value = option.dataset.city;
 
     if (value === 'auto') {
+      currentTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       if (geolocationGranted && geoLat !== null && geoLon !== null) {
         setLocationSource('geolocation', geoLat, geoLon, { smooth: true, cityName: null });
       } else {
@@ -1625,6 +1668,7 @@ function buildTimeUI() {
           cityName: FALLBACK_LOCATION.name
         });
       }
+      updateLabel();
       showCityOverlay('Your Location');
       setStackOpen(cityStackEl, cityTriggerEl, cityMenuEl, false);
       return;
@@ -1635,8 +1679,10 @@ function buildTimeUI() {
     setLocationSource('manual-city', city.lat, city.lon, { smooth: true, cityName: value });
     const cityMeta = CITY_DATASET.find((entry) => entry.name === value);
     if (cityMeta) {
+      currentTimezone = cityMeta.tz || currentTimezone;
       showCityOverlay(`${cityMeta.name}, ${cityMeta.country}`);
     }
+    updateLabel();
     setStackOpen(cityStackEl, cityTriggerEl, cityMenuEl, false);
   });
 
@@ -1707,6 +1753,7 @@ function buildTimeUI() {
   });
   document.getElementById('btn-reset').addEventListener('click', () => {
     simulationTime = new Date();
+    currentTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
     if (geolocationGranted && geoLat !== null && geoLon !== null) {
       setLocationSource('geolocation', geoLat, geoLon, { smooth: true, cityName: null });
@@ -1730,8 +1777,14 @@ function buildTimeUI() {
   updateLocationStatus();
 
   controlsApi = {
-    updateLocationStatus
+    updateLocationStatus,
+    showOverlay: showCityOverlay
   };
+
+  if (pendingOverlayMessage) {
+    showCityOverlay(pendingOverlayMessage);
+    pendingOverlayMessage = null;
+  }
 
   // Advance simulation time by 1 minute every 60 s when the user is not interacting
   setInterval(() => {

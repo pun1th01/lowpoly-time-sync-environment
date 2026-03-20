@@ -79,6 +79,10 @@ Use the time slider at the bottom to scrub through any hour of the day, or step 
 - 🎚️ Interactive time slider
 - 🔄 Reset to real location
 - 🏷️ Animated city/location overlay (fade in/out)
+- 🕒 Dual time display (user time + selected city time)
+- 🌐 Accurate timezone handling per selected city
+- 🔄 Real-time timezone switching when changing cities
+- 📍 Fallback location overlay when geolocation is denied
 
 | Feature | Description |
 |---|---|
@@ -100,6 +104,9 @@ Use the time slider at the bottom to scrub through any hour of the day, or step 
 | **Mobile bottom-sheet controls** | Collapsible touch-friendly control panel for small screens |
 | **Adaptive dropdown positioning** | Dropdowns/calendars open up/down based on viewport space to avoid clipping |
 | **City/location overlay** | Temporary non-blocking fade text for city changes and “Your Location” feedback |
+| **Dual time display** | Shows both user's local time and selected city time side-by-side |
+| **Timezone sync** | Automatically updates displayed time based on selected city's timezone (IANA format) |
+| **Fallback overlay feedback** | Displays "Using Default Location" when geolocation is denied |
 | **Auto time advance** | Simulation clock advances 1 minute per real-world minute when the slider is idle; pauses for 10 s after any interaction |
 | **Adaptive GPU rendering** | Automatically scales star density based on detected WebGL capability to maintain compatibility with low-end hardware while preserving full visual fidelity on modern devices |
 
@@ -112,6 +119,9 @@ Use the time slider at the bottom to scrub through any hour of the day, or step 
 - Touch-friendly controls for sliders, buttons, and overlays
 - Smooth transitions across panel, popovers, and overlays
 - Non-blocking overlay feedback system for city/geolocation changes
+- Dual time display layout (left: user time, right: city time)
+- Improved time readability and layout balance
+- Clear feedback when fallback location is used
 
 ---
 
@@ -273,6 +283,7 @@ http://localhost:8000
 - Use the date picker to change day/month/year
 - Click **Reset** to return to your real location
 - Select **Use My Location** anytime to switch back to geolocation
+- View both your local time and the selected city's time simultaneously
 
 ---
 
