@@ -468,7 +468,7 @@ const starMaterial = new THREE.ShaderMaterial({
     uniform float starVisibility;
     void main() {
       if (length(gl_PointCoord - vec2(0.5)) > 0.5) discard;
-      float intensity = vBrightness * vTwinkle * starVisibility * 1.35;
+      float intensity = vBrightness * vTwinkle * starVisibility * 2.8;
       gl_FragColor = vec4(vColor * intensity, intensity);
     }
   `
@@ -1645,14 +1645,18 @@ function buildTimeUI() {
     const cityDate = new Date(
       simulationTime.toLocaleString('en-US', { timeZone: currentTimezone })
     );
-    const ch = pad(cityDate.getHours());
-    const cm = pad(cityDate.getMinutes());
+    const cHours = cityDate.getHours();
+    const cMinutes = cityDate.getMinutes();
+    const ch = pad(cHours);
+    const cm = pad(cMinutes);
     cityTimeEl.textContent = activeCityName
       ? `${activeCityName}: ${ch}:${cm}`
       : `Local: ${ch}:${cm}`;
 
-    // Keep slider mapped to system/local time because it controls global simulationTime.
-    document.getElementById('time-slider').value = h * 60 + m;
+    // Map slider to the target city's local time instead of system local time
+    if (!userControllingTime) {
+      document.getElementById('time-slider').value = cHours * 60 + cMinutes;
+    }
 
     dateLabelEl.textContent = toPrettyDate(simulationTime);
   }
@@ -1714,7 +1718,18 @@ function buildTimeUI() {
     userInteractionTimeout = setTimeout(() => { userControllingTime = false; }, 10000);
 
     const total = parseInt(e.target.value);
-    simulationTime.setHours(Math.floor(total / 60), total % 60, 0, 0);
+    const targetCityH = Math.floor(total / 60);
+    const targetCityM = total % 60;
+
+    const cityDate = new Date(
+      simulationTime.toLocaleString('en-US', { timeZone: currentTimezone })
+    );
+    const currentCityH = cityDate.getHours();
+    const currentCityM = cityDate.getMinutes();
+
+    const diffMinutes = (targetCityH - currentCityH) * 60 + (targetCityM - currentCityM);
+    simulationTime.setMinutes(simulationTime.getMinutes() + diffMinutes);
+
     updateLabel();
     refreshSun();
   });
