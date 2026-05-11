@@ -1949,8 +1949,11 @@ function buildTimeUI() {
       showCityOverlay('Your Location');
     }
 
+    userControllingTime = false;
+
     updateLabel();
     updateLocationStatus();
+    refreshSun();
   });
 
   renderCityOptions();
